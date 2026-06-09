@@ -240,7 +240,7 @@ class TestGeneral(unittest.TestCase):
             step(s, (0, 31))
 
     def test_encode_length(self):
-        from damas.engine import encode
+        from src.damas.engine import encode
         s = initial_state()
         enc = encode(s)
         self.assertEqual(len(enc), 5 * 32)
