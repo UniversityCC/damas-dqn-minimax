@@ -1,1 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+.env
 .vscode/
+
+# Tests & cobertura
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# PyTorch checkpoints (archivos grandes van en models/ con .gitkeep)
+models/*.pt
+models/*.pth
+
+# Datos generados (partidas de auto-juego)
+data/*.json
+data/*.pkl
+data/*.csv
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_metadata
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+*.pyc
+.venv/
+
+.coverage
+coverage.xml
+models/*.pt
+data/*.json
+data/*.csv
+.ipynb_checkpoints/
+.DS_Store
