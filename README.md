@@ -21,6 +21,20 @@ pip install -r requirements.txt
 pytest
 ```
 
+## Docker (corre en cualquier máquina, sin GPU)
+
+Alternativa al `venv`: una imagen **CPU-only** que funciona igual en Windows/Mac/Linux
+sin instalar nada más que Docker. El entrenamiento del DQN con GPU se hace aparte en
+Colab/Kaggle; este contenedor cubre motor, Minimax, evaluación, tests y la demo.
+
+```bash
+# Correr la batería de tests dentro del contenedor
+docker compose run --rm tests
+
+# Levantar la demo (cuando exista demo/app.py, issue #18) en http://localhost:8501
+docker compose --profile demo up demo
+```
+
 ## Estructura
 
 ```
