@@ -1,0 +1,21 @@
+# Uso:
+#   docker compose run --rm tests          -> corre la batería de pytest
+#   docker compose --profile demo up demo  -> levanta la demo (cuando exista demo/app.py, issue #18)
+services:
+  tests:
+    build: .
+    image: damas-dqn-minimax:cpu
+    command: pytest
+    volumes:
+      - .:/app                # usa el código en vivo (no hace falta rebuild al editar)
+
+  demo:
+    build: .
+    image: damas-dqn-minimax:cpu
+    command: streamlit run demo/app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+      - ./models:/app/models  # checkpoints entrenados para que la demo los cargue
+    profiles: ["demo"]        # no arranca por defecto: la demo aún no está implementada

@@ -1,0 +1,30 @@
+# Control de versiones / CI
+.git
+.github
+
+# Caches y artefactos de Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+
+# Entornos virtuales locales
+.venv/
+venv/
+env/
+
+# Artefactos generados (no van a la imagen)
+models/*.pt
+models/*.pth
+data/*.json
+data/*.pkl
+data/*.csv
+.ipynb_checkpoints/
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
