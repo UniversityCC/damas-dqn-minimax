@@ -1,0 +1,11 @@
+gymnasium==0.29.1
+numpy==1.26.4
+torch==2.3.0
+matplotlib==3.9.0
+pygame==2.5.2
+streamlit==1.35.0
+jupyterlab==4.2.1
+pytest==8.2.1
+pytest-cov==5.0.0
+tqdm==4.66.4
+pandas==2.2.2
