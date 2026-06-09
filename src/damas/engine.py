@@ -45,7 +45,15 @@ def _build_neighbors() -> list[dict[str, int | None]]:
     return neighbors
  
 NEIGHBORS = _build_neighbors()
- 
+
+_JUMP_OVER: dict[tuple[int, int], int] = {}
+for _sq in range(32):
+    for _d, _mid in NEIGHBORS[_sq].items():
+        if _mid is None:
+            continue
+        _land = NEIGHBORS[_mid].get(_d)
+        if _land is not None:
+            _JUMP_OVER[(_sq, _land)] = _mid
  
 def _promotion_row(turn: int) -> set[int]:
     """Casillas de la última fila para el jugador dado."""
@@ -54,60 +62,143 @@ def _promotion_row(turn: int) -> set[int]:
     else:           
         return {0, 1, 2, 3}
 
+def _move_dirs(piece: int) -> list[str]:
+    """Direcciones de movimiento (sin captura) para una pieza."""
+    if abs(piece) == 2:                    # dama
+        return ["ul", "ur", "dl", "dr"]
+    return ["dl", "dr"] if piece > 0 else ["ul", "ur"]
+ 
+ 
+def _capture_dirs(_piece: int) -> list[str]:
+    """Las damas y las piezas normales capturan en las 4 diagonales."""
+    return ["ul", "ur", "dl", "dr"]
+
+def _capture_sequences(
+    sq: int,
+    piece: int,
+    board: list[int],
+    captured: frozenset[int],
+    path: tuple[int, ...],
+) -> list[tuple[int, ...]]:
+    turn      = 1 if piece > 0 else -1
+    prom_row  = _promotion_row(turn)
+    sequences = []
+ 
+    for d in _capture_dirs(piece):
+        mid = NEIGHBORS[sq].get(d)
+        if mid is None:
+            continue
+        land = NEIGHBORS[mid].get(d)
+        if land is None:
+            continue
+ 
+        enemy = board[mid]
+        if enemy == 0 or (enemy > 0) == (piece > 0) or mid in captured:
+            continue
+        if board[land] != 0 and land not in captured:
+            if land not in captured:
+                continue
+        new_captured = captured | {mid}
+ 
+        landed_piece = piece
+        just_promoted = False
+        if abs(piece) == 1 and land in prom_row:
+            landed_piece   = 2 * turn
+            just_promoted  = True
+ 
+        new_path = path + (land,)
+ 
+        # Intenta continuar la cadena 
+        if not just_promoted:
+            continuations = _capture_sequences(
+                land, landed_piece, board, new_captured, new_path
+            )
+        else:
+            continuations = []
+ 
+        if continuations:
+            sequences.extend(continuations)
+        else:
+            sequences.append(new_path)
+ 
+    return sequences
+ 
 def legal_moves(state: State) -> list[Action]:
+    """
+    Devuelve todos los movimientos legales y si existe al menos una captura posible,
+    se devuelven solo capturas 
+    """
     board = state["board"]
     turn  = state["turn"]
  
-    moves: list[Action] = []
+    captures: list[Action] = []
+    simple:   list[Action] = []
  
     for sq in range(32):
         piece = board[sq]
         if piece == 0 or (piece > 0) != (turn > 0):
             continue
  
-        nb = NEIGHBORS[sq]
-        is_king = abs(piece) == 2
+        # --- capturas desde esta casilla ---
+        seqs = _capture_sequences(sq, piece, board, frozenset(), (sq,))
+        captures.extend(seqs)
  
-        if turn == 1:         
-            dirs = ["dl", "dr"]
-        else:      
-            dirs = ["ul", "ur"]
- 
-        if is_king:
-            dirs = ["ul", "ur", "dl", "dr"]
- 
-        for d in dirs:
-            dest = nb[d]
+        # --- movimientos simples ---
+        for d in _move_dirs(piece):
+            dest = NEIGHBORS[sq].get(d)
             if dest is not None and board[dest] == 0:
-                moves.append((sq, dest))
+                simple.append((sq, dest))
  
-    return moves
+    return captures if captures else simple
 
 def step(state: State, action: Action) -> State:
-    if action not in legal_moves(state):
+
+    legal = legal_moves(state)
+    if action not in legal:
         raise ValueError(f"Acción ilegal: {action}")
  
     board = list(state["board"])
     turn  = state["turn"]
-    src, dst = action[0], action[-1]
- 
+    src = action[0]
     piece = board[src]
     board[src] = 0
- 
+
+    is_capture = len(action) >= 3 or (
+        # captura de un solo salto mientras la distancia en el tablero es 2
+        len(action) == 2 and (action[1], action[0]) in _JUMP_OVER or
+        (action[0], action[1]) in _JUMP_OVER
+    )
+
+    is_capture = len(action) >= 2 and all(
+        (action[i], action[i + 1]) in _JUMP_OVER
+        for i in range(len(action) - 1)
+    )
+    # Elimina piezas capturadas
+    for i in range(len(action) - 1):
+        mid = _JUMP_OVER.get((action[i], action[i + 1]))
+        if mid is not None:
+            board[mid] = 0
+    dst = action[-1]
     if dst in _promotion_row(turn) and abs(piece) == 1:
         piece = 2 * turn   # 2 o -2
  
     board[dst] = piece
- 
+    no_capture_count = 0 if is_capture else state["no_capture_count"] + 1
+    pos_key   = _position_key(board, -turn)
+    history   = dict(state.get("position_history", {}))
+    history[pos_key] = history.get(pos_key, 0) + 1
     return {
         "board": board,
         "turn": -turn,
-        "no_capture_count": state["no_capture_count"] + 1,
+        "no_capture_count": no_capture_count,
+        "position_history": history,
     }
  
 
 def is_terminal(state: State) -> bool:
     if state["no_capture_count"] >= 80:
+        return True
+    if _threefold_repetition(state):
         return True
     return len(legal_moves(state)) == 0
  
@@ -117,8 +208,17 @@ def result(state: State) -> int | None:
         return None
     if state["no_capture_count"] >= 80:
         return 0
+    if _threefold_repetition(state):
+        return 0
     return -state["turn"]
 
+def _position_key(board: list[int], turn: int) -> tuple:
+    return (tuple(board), turn)
+ 
+ 
+def _threefold_repetition(state: State) -> bool:
+    history = state.get("position_history", {})
+    return any(v >= 3 for v in history.values())
 
 def encode(state: State) -> list[float]:
     board = state["board"]
@@ -139,3 +239,11 @@ def initial_state() -> State:
     for i in range(20, 32):
         board[i] = -1
     return {"board": board, "turn": 1, "no_capture_count": 0}
+
+def empty_state_for_test(turn: int = 1) -> State:
+    return {
+        "board":            [0] * 32,
+        "turn":             turn,
+        "no_capture_count": 0,
+        "position_history": {},
+    }
