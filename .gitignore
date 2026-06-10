@@ -21,9 +21,10 @@ env/
 coverage.xml
 htmlcov/
 
-# PyTorch checkpoints (archivos grandes; las carpetas se versionan con .gitkeep)
-models/*.pt
-models/*.pth
+# PyTorch checkpoints (archivos grandes; NUNCA se versionan, vivan donde vivan)
+*.pt
+*.pth
+src/checkpoints/
 
 # Datos generados (partidas de auto-juego)
 data/*.json
