@@ -29,8 +29,10 @@ class DQNAgent:
         eps_decay_steps: int = 50_000,
         target_update_freq: int = 1000,
         device: str = "cpu",
+        use_target: bool = True,
     ):
         self.device = torch.device(device)
+        self.use_target = use_target
         self.online = QNetwork().to(self.device)
         self.target = QNetwork().to(self.device)
         self.target.load_state_dict(self.online.state_dict())
@@ -88,12 +90,14 @@ class DQNAgent:
         # Q(s, a) según la red online
         q_pred = self.online(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
-        # Target negamax con la red objetivo: y = r - γ · max_legales Q_target(s')
+        # Target negamax: y = r - γ · max_legales Q_bootstrap(s')
+        # Si use_target=False se usa la red online para bootstrap (sin red objetivo).
+        bootstrap_net = self.target if self.use_target else self.online
         with torch.no_grad():
             next_states = torch.tensor([encode(t.next_state) for t in batch],
                                        dtype=torch.float32, device=self.device)
             masks = torch.stack([legal_action_mask(t.next_state) for t in batch]).to(self.device)
-            q_next = self.target(next_states).masked_fill(~masks, float("-inf"))
+            q_next = bootstrap_net(next_states).masked_fill(~masks, float("-inf"))
             best_next = q_next.max(dim=1).values
             best_next = torch.where(torch.isfinite(best_next), best_next,
                                     torch.zeros_like(best_next))  # next sin legales -> 0
@@ -111,8 +115,10 @@ class DQNAgent:
         return float(loss.item())
 
     def update_target(self) -> None:
-        """Copia dura de los pesos de la red online a la red objetivo."""
-        self.target.load_state_dict(self.online.state_dict())
+        """Copia dura de los pesos de la red online a la red objetivo.
+        No-op cuando use_target=False."""
+        if self.use_target:
+            self.target.load_state_dict(self.online.state_dict())
 
     def save(self, path: str) -> None:
         """Guarda un checkpoint: red online, red objetivo, optimizador y pasos de aprendizaje."""
