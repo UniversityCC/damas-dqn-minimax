@@ -1,0 +1,5 @@
+dqn_label,depth,dqn_wins,mm_wins,draws,total,win_rate
+DQN(ep14480),3,0,20,0,20,0.0
+DQN(ep14480),4,10,10,0,20,0.5
+DQN(ep14480),5,0,20,0,20,0.0
+DQN(ep14480),6,0,20,0,20,0.0
