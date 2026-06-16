@@ -9,6 +9,8 @@ agente DQN (issue #11); aquí solo está la arquitectura y el forward.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import torch
 from torch import nn
 
@@ -19,17 +21,30 @@ INPUT_SIZE = 160  # 5 canales × 32 casillas (salida de damas.encode)
 
 
 class QNetwork(nn.Module):
-    """Aproximador de la función de valor-acción Q(s, ·)."""
+    """Aproximador de la función de valor-acción Q(s, ·).
 
-    def __init__(self, hidden: int = 512):
+    ``hidden`` define las capas ocultas y permite comparar arquitecturas (issue #13):
+      - ``int``       → dos capas ocultas de ese ancho (comportamiento por defecto).
+      - secuencia     → una capa oculta por cada elemento, p. ej. ``(256, 256)`` o
+                        ``(512, 512, 1024)``.
+    La arquitectura por defecto ``(512, 512)`` es idéntica a la versión previa, por
+    lo que los checkpoints existentes siguen cargando sin cambios.
+    """
+
+    def __init__(self, hidden: int | Sequence[int] = (512, 512)):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(INPUT_SIZE, hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, NUM_ACTIONS),
-        )
+        if isinstance(hidden, int):
+            hidden = (hidden, hidden)
+        self.hidden = tuple(hidden)
+
+        layers: list[nn.Module] = []
+        prev = INPUT_SIZE
+        for width in self.hidden:
+            layers.append(nn.Linear(prev, width))
+            layers.append(nn.ReLU())
+            prev = width
+        layers.append(nn.Linear(prev, NUM_ACTIONS))
+        self.net = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """``x``: tensor (batch, 160) → Q-valores (batch, 1024)."""

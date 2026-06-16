@@ -30,11 +30,13 @@ class DQNAgent:
         target_update_freq: int = 1000,
         device: str = "cpu",
         use_target: bool = True,
+        hidden: int | tuple[int, ...] = (512, 512),
     ):
         self.device = torch.device(device)
         self.use_target = use_target
-        self.online = QNetwork().to(self.device)
-        self.target = QNetwork().to(self.device)
+        self.hidden = hidden
+        self.online = QNetwork(hidden).to(self.device)
+        self.target = QNetwork(hidden).to(self.device)
         self.target.load_state_dict(self.online.state_dict())
         self.target.eval()
         self.optimizer = torch.optim.Adam(self.online.parameters(), lr=lr)
