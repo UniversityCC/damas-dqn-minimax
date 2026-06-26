@@ -69,9 +69,16 @@ def _move_dirs(piece: int) -> list[str]:
     return ["dl", "dr"] if piece > 0 else ["ul", "ur"]
  
  
-def _capture_dirs(_piece: int) -> list[str]:
-    """Las damas y las piezas normales capturan en las 4 diagonales."""
-    return ["ul", "ur", "dl", "dr"]
+def _capture_dirs(piece: int) -> list[str]:
+    """Direcciones de captura para una pieza.
+
+    En esta variante, una ficha normal no retrocede: las rojas avanzan hacia
+    filas mayores (dl/dr) y las negras hacia filas menores (ul/ur). Solo una
+    dama/reina coronada puede moverse y capturar en las 4 diagonales.
+    """
+    if abs(piece) == 2:
+        return ["ul", "ur", "dl", "dr"]
+    return ["dl", "dr"] if piece > 0 else ["ul", "ur"]
 
 def _capture_sequences(
     sq: int,
@@ -95,9 +102,8 @@ def _capture_sequences(
         enemy = board[mid]
         if enemy == 0 or (enemy > 0) == (piece > 0) or mid in captured:
             continue
-        if board[land] != 0 and land not in captured:
-            if land not in captured:
-                continue
+        if board[land] != 0:
+            continue
         new_captured = captured | {mid}
  
         landed_piece = piece
@@ -107,11 +113,17 @@ def _capture_sequences(
             just_promoted  = True
  
         new_path = path + (land,)
+        next_board = list(board)
+        next_board[sq] = 0
+        next_board[mid] = 0
+        next_board[land] = landed_piece
  
-        # Intenta continuar la cadena 
+        # Intenta continuar la cadena sobre el tablero resultante del salto.
+        # Sin esta actualización temporal, las multicapturas se calculan con
+        # piezas en casillas antiguas y pueden aparecer/desaparecer jugadas mal.
         if not just_promoted:
             continuations = _capture_sequences(
-                land, landed_piece, board, new_captured, new_path
+                land, landed_piece, next_board, new_captured, new_path
             )
         else:
             continuations = []

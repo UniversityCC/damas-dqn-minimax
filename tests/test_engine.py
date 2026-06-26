@@ -11,7 +11,7 @@ class TestMandatoryCapture(unittest.TestCase):
         s = empty_state_for_test(turn=1)
         found = False
         for a in range(32):
-            for d in ["ul", "ur", "dl", "dr"]:
+            for d in ["dl", "dr"]:
                 mid = NEIGHBORS[a][d]
                 if mid is None:
                     continue
@@ -36,14 +36,14 @@ class TestMandatoryCapture(unittest.TestCase):
     def test_no_simple_move_alongside_capture(self):
         """No debe mezclarse un movimiento simple con capturas en la lista."""
         s = empty_state_for_test(turn=1)
-        nb = NEIGHBORS[21]
-        mid  = nb["ul"]
+        nb = NEIGHBORS[10]
+        mid  = nb["dl"]
         if mid is None:
             self.skipTest("geometría no disponible")
-        land = NEIGHBORS[mid].get("ul")
+        land = NEIGHBORS[mid].get("dl")
         if land is None:
             self.skipTest("geometría no disponible")
-        s["board"][21]  =  1
+        s["board"][10]  =  1
         s["board"][mid] = -1
         moves = legal_moves(s)
         simple = [(m[0], m[1]) for m in moves if (m[0], m[1]) not in _JUMP_OVER]
@@ -55,14 +55,14 @@ class TestMultiCapture(unittest.TestCase):
         """Devuelve (estado, a, mid1, b, mid2, c) para doble captura."""
         s = empty_state_for_test(turn=1)
         for a in range(32):
-            for d1 in ["ul", "ur", "dl", "dr"]:
+            for d1 in ["dl", "dr"]:
                 mid1 = NEIGHBORS[a][d1]
                 if mid1 is None:
                     continue
                 b = NEIGHBORS[mid1].get(d1)
                 if b is None or b == a:
                     continue
-                for d2 in ["ul", "ur", "dl", "dr"]:
+                for d2 in ["dl", "dr"]:
                     mid2 = NEIGHBORS[b][d2]
                     if mid2 is None or mid2 == mid1:
                         continue
@@ -102,6 +102,37 @@ class TestMultiCapture(unittest.TestCase):
         s["no_capture_count"] = 20
         s2 = step(s, (a, b, c))
         self.assertEqual(s2["no_capture_count"], 0)
+
+    def test_double_capture_uses_updated_board(self):
+        """La búsqueda de cadenas debe mover la pieza en cada salto temporal."""
+        s = empty_state_for_test(turn=1)
+        s["board"][1] = 1
+        s["board"][6] = -1
+        s["board"][15] = -1
+
+        self.assertEqual(legal_moves(s), [(1, 10, 19)])
+
+        s2 = step(s, (1, 10, 19))
+        self.assertEqual(s2["board"][1], 0)
+        self.assertEqual(s2["board"][6], 0)
+        self.assertEqual(s2["board"][15], 0)
+        self.assertEqual(s2["board"][19], 1)
+
+    def test_normal_piece_cannot_capture_backward(self):
+        """Una ficha normal no debe capturar hacia atrás."""
+        s = empty_state_for_test(turn=1)
+        s["board"][12] = 1
+        s["board"][8] = -1
+
+        self.assertNotIn((12, 5), legal_moves(s))
+
+    def test_king_can_capture_backward(self):
+        """Una dama/reina sí puede capturar hacia atrás si hay casilla libre."""
+        s = empty_state_for_test(turn=1)
+        s["board"][12] = 2
+        s["board"][8] = -1
+
+        self.assertIn((12, 5), legal_moves(s))
 
 
 class TestPromotionStopsChain(unittest.TestCase):
@@ -169,7 +200,7 @@ class TestDrawByMoveCount(unittest.TestCase):
         s = empty_state_for_test(turn=1)
         s["no_capture_count"] = 35
         for a in range(32):
-            for d in ["ul","ur","dl","dr"]:
+            for d in ["dl","dr"]:
                 mid = NEIGHBORS[a][d]
                 if mid is None: continue
                 land = NEIGHBORS[mid].get(d)
@@ -238,6 +269,15 @@ class TestGeneral(unittest.TestCase):
         s = initial_state()
         with self.assertRaises(ValueError):
             step(s, (0, 31))
+
+    def test_same_row_move_12_to_14_is_illegal(self):
+        """Una pieza no puede moverse lateralmente en la misma fila."""
+        s = empty_state_for_test(turn=1)
+        s["board"][12] = 1
+
+        self.assertNotIn((12, 14), legal_moves(s))
+        with self.assertRaises(ValueError):
+            step(s, (12, 14))
 
     def test_encode_length(self):
         from src.damas.engine import encode
