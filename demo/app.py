@@ -237,6 +237,23 @@ def render_board(highlights: Iterable[int]) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Damas DQN vs Humano", page_icon="♟️", layout="wide")
+    st.markdown(
+        """
+        <style>
+        [data-testid="stHeader"] {
+            height: 0rem;
+            min-height: 0rem;
+            background: transparent;
+        }
+
+        [data-testid="stAppViewContainer"] > .main .block-container {
+            padding-top: 0.75rem;
+            padding-bottom: 1rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     ensure_session_defaults()
 
     st.title("♟️ Damas: Humano vs DQN")
