@@ -98,6 +98,7 @@ def new_game(human_player: int) -> None:
     st.session_state.selected_square = None
     st.session_state.message = "Partida nueva. Rojas mueven primero."
     st.session_state.move_log = []
+    st.session_state.pending_candidates = []
 
 
 def ensure_session_defaults() -> None:
@@ -207,6 +208,14 @@ def status_text(state: State) -> str:
     return f"Turno actual: {'🔴 rojas' if state['turn'] == 1 else '⚫ negras'}"
 
 
+def apply_pending_move(choice: int) -> None:
+    """Aplica una captura pendiente desde callback para evitar reruns extra."""
+    pending = st.session_state.get("pending_candidates", [])
+    if 0 <= choice < len(pending):
+        apply_move(pending[choice], "Humano")
+    st.session_state.pending_candidates = []
+
+
 def render_board(highlights: Iterable[int]) -> None:
     """Dibuja el tablero como una cuadrícula de botones Streamlit."""
     state = st.session_state.game_state
@@ -230,9 +239,13 @@ def render_board(highlights: Iterable[int]) -> None:
                 elif square in highlight_set:
                     marker = "●"
                 label = f"{piece or marker}\n{square}" if piece else f"{marker}\n{square}"
-                if st.button(label, key=f"sq-{square}", use_container_width=True):
-                    handle_click(square)
-                    st.rerun()
+                st.button(
+                    label,
+                    key=f"sq-{square}",
+                    use_container_width=True,
+                    on_click=handle_click,
+                    args=(square,),
+                )
 
 
 def main() -> None:
@@ -284,9 +297,12 @@ def main() -> None:
             st.warning("No hay checkpoints `.pt` en `models/` ni en `src/models/`.")
             st.info("Copia, por ejemplo, `models/checkpoint_final.pt` o `src/models/checkpoint_final.pt` para jugar contra el DQN entrenado.")
 
-        if st.button("Nueva partida", use_container_width=True):
-            new_game(chosen_human)
-            st.rerun()
+        st.button(
+            "Nueva partida",
+            use_container_width=True,
+            on_click=new_game,
+            args=(chosen_human,),
+        )
 
         if chosen_human != st.session_state.human_player:
             st.info("Pulsa **Nueva partida** para aplicar el cambio de color.")
@@ -308,10 +324,12 @@ def main() -> None:
         if pending:
             st.subheader("Resolver captura")
             choice = st.selectbox("Secuencia", list(range(len(pending))), format_func=lambda i: action_text(pending[i]))
-            if st.button("Aplicar secuencia", use_container_width=True):
-                apply_move(pending[choice], "Humano")
-                st.session_state.pending_candidates = []
-                st.rerun()
+            st.button(
+                "Aplicar secuencia",
+                use_container_width=True,
+                on_click=apply_pending_move,
+                args=(choice,),
+            )
 
     maybe_agent_turn(agent)
 
