@@ -126,6 +126,7 @@ def train(
     checkpoint_every: int = 200,     # guardar checkpoint cada N episodios
     resume_checkpoint: str | None = None,
     device: str = "cpu",
+    log_csv: str | None = None,      # ruta opcional para guardar curva de entrenamiento
     # Hiperparámetros del agente (defaults razonables para un arranque rápido)
     gamma: float = 0.99,
     lr: float = 1e-3,
@@ -163,6 +164,18 @@ def train(
     total_transitions = 0
     learn_calls = 0
     t0 = time.time()
+    training_log: list[dict] = []   # filas para log_csv
+    _log_fields  = ["episode", "avg_loss", "epsilon", "win_rate", "learn_steps"]
+
+    def _flush_log_csv(rows: list[dict], path: str, append: bool) -> None:
+        import csv as _csv
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        mode = "a" if append else "w"
+        with open(path, mode, newline="", encoding="utf-8") as _f:
+            w = _csv.DictWriter(_f, fieldnames=_log_fields)
+            if not append:
+                w.writeheader()
+            w.writerows(rows)
 
     log.info(
         "Iniciando self-play: %d episodios | batch=%d | buffer=%d | device=%s",
@@ -229,6 +242,18 @@ def train(
                 elapsed,
             )
 
+            n_results = wins + losses + draws + trunc or 1
+            row = {
+                "episode":     ep,
+                "avg_loss":    round(avg_loss, 6),
+                "epsilon":     round(agent.epsilon, 4),
+                "win_rate":    round(wins / n_results, 4),
+                "learn_steps": agent.learn_steps,
+            }
+            training_log.append(row)
+            if log_csv:
+                _flush_log_csv([row], log_csv, append=len(training_log) > 1)
+
             # Verificar tendencia de la pérdida cada `log_every` episodios
             if len(loss_window) >= log_every // 2:
                 first_half  = list(loss_window)[: len(loss_window) // 2]
@@ -247,6 +272,16 @@ def train(
     # --- Checkpoint final ---
     final_path = os.path.join(checkpoint_dir, "checkpoint_final.pt")
     agent.save(final_path)
+
+    # --- Confirmar curva de entrenamiento ---
+    if log_csv and training_log:
+        log.info("Curva de entrenamiento guardada: %s  (%d filas)", log_csv, len(training_log))
+    elif log_csv:
+        log.warning(
+            "No se escribio '%s': episodes (%d) < log_every (%d), "
+            "ningun punto de log fue generado. Usa --log-every menor que --episodes.",
+            log_csv, episodes, log_every,
+        )
     total_time = time.time() - t0
     log.info(
         "Entrenamiento completado en %.1fs | %d episodios | %d transiciones | "
@@ -283,6 +318,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--eps-end",           type=float, default=0.05)
     p.add_argument("--eps-decay-steps",   type=int,   default=50_000)
     p.add_argument("--target-update-freq",type=int,   default=1_000)
+    p.add_argument("--log-csv",           type=str,   default=None,
+                   dest="log_csv",
+                   help="Ruta CSV para guardar curva de entrenamiento (ej: results/training_log.csv)")
     return p.parse_args()
 
 
@@ -297,6 +335,7 @@ if __name__ == "__main__":
         checkpoint_every=args.checkpoint_every,
         resume_checkpoint=args.resume_checkpoint,
         device=args.device,
+        log_csv=args.log_csv,
         gamma=args.gamma,
         lr=args.lr,
         batch_size=args.batch_size,
