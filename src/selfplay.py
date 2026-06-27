@@ -165,6 +165,17 @@ def train(
     learn_calls = 0
     t0 = time.time()
     training_log: list[dict] = []   # filas para log_csv
+    _log_fields  = ["episode", "avg_loss", "epsilon", "win_rate", "learn_steps"]
+
+    def _flush_log_csv(rows: list[dict], path: str, append: bool) -> None:
+        import csv as _csv
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        mode = "a" if append else "w"
+        with open(path, mode, newline="", encoding="utf-8") as _f:
+            w = _csv.DictWriter(_f, fieldnames=_log_fields)
+            if not append:
+                w.writeheader()
+            w.writerows(rows)
 
     log.info(
         "Iniciando self-play: %d episodios | batch=%d | buffer=%d | device=%s",
@@ -232,13 +243,16 @@ def train(
             )
 
             n_results = wins + losses + draws + trunc or 1
-            training_log.append({
+            row = {
                 "episode":     ep,
                 "avg_loss":    round(avg_loss, 6),
                 "epsilon":     round(agent.epsilon, 4),
                 "win_rate":    round(wins / n_results, 4),
                 "learn_steps": agent.learn_steps,
-            })
+            }
+            training_log.append(row)
+            if log_csv:
+                _flush_log_csv([row], log_csv, append=len(training_log) > 1)
 
             # Verificar tendencia de la pérdida cada `log_every` episodios
             if len(loss_window) >= log_every // 2:
@@ -259,15 +273,15 @@ def train(
     final_path = os.path.join(checkpoint_dir, "checkpoint_final.pt")
     agent.save(final_path)
 
-    # --- Guardar curva de entrenamiento ---
+    # --- Confirmar curva de entrenamiento ---
     if log_csv and training_log:
-        import csv as _csv
-        os.makedirs(os.path.dirname(os.path.abspath(log_csv)), exist_ok=True)
-        with open(log_csv, "w", newline="", encoding="utf-8") as _f:
-            writer = _csv.DictWriter(_f, fieldnames=list(training_log[0].keys()))
-            writer.writeheader()
-            writer.writerows(training_log)
-        log.info("Curva de entrenamiento guardada: %s", log_csv)
+        log.info("Curva de entrenamiento guardada: %s  (%d filas)", log_csv, len(training_log))
+    elif log_csv:
+        log.warning(
+            "No se escribio '%s': episodes (%d) < log_every (%d), "
+            "ningun punto de log fue generado. Usa --log-every menor que --episodes.",
+            log_csv, episodes, log_every,
+        )
     total_time = time.time() - t0
     log.info(
         "Entrenamiento completado en %.1fs | %d episodios | %d transiciones | "
