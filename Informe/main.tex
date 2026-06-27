@@ -2,11 +2,14 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage[spanish]{babel}
+\usepackage[spanish,es-noshorthands]{babel}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{float}
 \usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
 \usepackage[hidelinks]{hyperref}
 
 \graphicspath{{Informe/figures/}{figures/}}
@@ -81,25 +84,56 @@ El agente Minimax usa poda alfa-beta con profundidad limitada entre 3 y 6. En es
 
 \subsection{Agente DQN}
 
-El agente DQN usa una red completamente conectada con entrada de 160 dimensiones, dos capas ocultas de 512 unidades con activación ReLU y salida de 1024 valores $Q$. La política de entrenamiento es $\epsilon$-greedy, con decaimiento lineal desde $\epsilon=1.0$ hasta $\epsilon=0.05$. La optimización usa Adam, pérdida Huber (\texttt{smooth\_l1\_loss}), factor de descuento $\gamma=0.99$ y red objetivo actualizada periódicamente.
+El agente DQN aproxima la función de valor de acción $Q(s,a)$ mediante una red completamente conectada (MLP). La entrada es el vector de 160 dimensiones descrito en la Sección~3; le siguen dos capas ocultas de 512 unidades con activación ReLU y una capa de salida de 1024 valores, uno por cada acción indexada del espacio origen--destino. La Figura~\ref{fig:arquitectura} resume la topología.
 
-La actualización usa una formulación tipo negamax para juegos de suma cero:
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.9cm and 1.0cm]
+\tikzstyle{layer}=[draw, rounded corners, minimum height=1.15cm, minimum width=2.15cm, align=center, font=\small]
+\node[layer] (in) {Entrada\\$s\in\mathbb{R}^{160}$};
+\node[layer, right=of in] (h1) {FC $512$\\ReLU};
+\node[layer, right=of h1] (h2) {FC $512$\\ReLU};
+\node[layer, right=of h2] (out) {Salida\\$Q\in\mathbb{R}^{1024}$};
+\node[layer, right=of out, fill=black!8] (mask) {Máscara legal\\$+\ \arg\max$};
+\draw[->,>=latex] (in)--(h1);
+\draw[->,>=latex] (h1)--(h2);
+\draw[->,>=latex] (h2)--(out);
+\draw[->,>=latex] (out)--(mask);
+\end{tikzpicture}
+\caption{Arquitectura de la red $Q$: MLP $160\rightarrow512\rightarrow512\rightarrow1024$ con activaciones ReLU, seguida del enmascarado de acciones ilegales antes del \textit{argmax}.}
+\label{fig:arquitectura}
+\end{figure}
 
-\[
-y = r - \gamma \max_{a'} Q_{\text{target}}(s', a')
-\]
+La topología es configurable: el número y ancho de las capas ocultas se parametrizan, lo que habilita la comparación arquitectónica de la Sección~5. Durante la inferencia se aplica una máscara de legalidad sobre la salida, asignando $-\infty$ a las acciones ilegales antes del \textit{argmax}; así la política nunca elige un movimiento inválido pese a tener una capa de salida de tamaño fijo. La política de comportamiento es $\epsilon$-greedy con decaimiento lineal de $\epsilon=1.0$ a $\epsilon=0.05$, y el objetivo de aprendizaje adopta una formulación \emph{negamax} que se detalla en la Sección~5.
 
-cuando el estado siguiente no es terminal. El signo negativo refleja que el siguiente turno pertenece al oponente.
+\subsection{Justificación de la elección}
+
+La comparación central del proyecto enfrenta dos paradigmas. Minimax con poda alfa-beta es búsqueda exacta y no requiere entrenamiento: dada una heurística, garantiza la mejor jugada hasta la profundidad explorada, pero su costo crece exponencialmente con la profundidad y su techo de juego queda limitado por la calidad de la heurística manual. El DQN, en cambio, aprende una función de valor a partir de la experiencia de auto-juego, sin heurística explícita, a cambio de un entrenamiento costoso y de la inestabilidad propia de la aproximación de funciones.
+
+Se eligió DQN frente a alternativas más sofisticadas como AlphaZero por viabilidad dentro del alcance del curso. AlphaZero combina una búsqueda Monte Carlo (MCTS) guiada por una red de política y valor, lo que exige un presupuesto de cómputo (auto-juego masivo en GPU/TPU) y una complejidad de implementación muy superiores. El DQN conserva la idea de aprender por auto-juego una estimación de valor, pero con una sola red y sin MCTS, lo que lo vuelve entrenable en CPU y suficiente para contrastar de forma controlada el enfoque aprendido contra la línea base de búsqueda clásica. Minimax cumple además el papel de oponente de referencia exigente y reproducible para medir el progreso del DQN.
 
 \section{Entrenamiento y validación}
 
-El script de entrenamiento por auto-juego permite configurar número de episodios, máximo de pasos por episodio, frecuencia de aprendizaje, tamaño de lote, capacidad del buffer, tasa de aprendizaje y frecuencia de checkpoint. En cada episodio se generan transiciones hasta alcanzar un estado terminal o el límite de pasos, y luego se realizan pasos de aprendizaje en función de las transiciones acumuladas.
+\subsection{Proceso de entrenamiento}
 
-La validación técnica se realizó con pruebas automatizadas sobre el motor, el entorno, la heurística, la interfaz pública y el torneo. La ejecución local con el entorno virtual del proyecto produjo 77 pruebas aprobadas. Las advertencias observadas pertenecen a la escritura de caché de \texttt{pytest} en Windows y no afectaron la ejecución de las pruebas.
+El agente se entrena por auto-juego: ambos bandos comparten la misma red y exploran con política $\epsilon$-greedy. Cada episodio genera una secuencia de transiciones $(s,a,r,s',\textit{done})$ hasta alcanzar un estado terminal o el límite de pasos. La recompensa se asigna desde la perspectiva del jugador en turno ($+1$ si gana, $-1$ si pierde, $0$ en jugadas intermedias y empates) y cada transición se almacena en el replay buffer. Cada \texttt{learn\_every} transiciones se ejecuta un paso de optimización sobre un minibatch muestreado uniformemente del buffer, y la red objetivo se sincroniza por copia dura cada \texttt{target\_update\_freq} pasos de aprendizaje. El parámetro $\epsilon$ decae linealmente con los pasos de aprendizaje.
+
+\subsection{Función de pérdida}
+
+El DQN minimiza el error de Bellman. Como las Damas son un juego de suma cero por turnos, el valor del estado siguiente se ve desde la perspectiva del oponente, por lo que el objetivo adopta una forma \emph{negamax}:
+\[
+y =
+\begin{cases}
+r & \text{si } s' \text{ es terminal},\\[4pt]
+r - \gamma \displaystyle\max_{a' \in \mathcal{A}_{\text{legal}}(s')} Q_{\theta^-}(s', a') & \text{en otro caso},
+\end{cases}
+\]
+donde $\theta^-$ son los pesos de la red objetivo y $\mathcal{A}_{\text{legal}}(s')$ el conjunto de acciones legales en $s'$ (las ilegales se enmascaran con $-\infty$ antes del máximo). El signo negativo refleja que el siguiente turno pertenece al oponente. La pérdida es la función de Huber (\texttt{smooth\_l1\_loss}) entre la predicción $Q_\theta(s,a)$ y el objetivo $y$, más robusta a valores atípicos que el error cuadrático, y se optimiza con Adam. La Tabla~\ref{tab:config} resume la configuración base.
 
 \begin{table}[H]
 \centering
 \caption{Configuración principal implementada para DQN.}
+\label{tab:config}
 \begin{tabular}{ll}
 \toprule
 Componente & Valor \\
@@ -114,9 +148,67 @@ Batch por defecto & 64 \\
 Replay buffer & 50 000 transiciones \\
 Factor de descuento & 0.99 \\
 Política & $\epsilon$-greedy \\
+Decaimiento $\epsilon$ & lineal $1.0 \to 0.05$ \\
+Red objetivo & copia dura periódica \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\subsection{Ajuste de hiperparámetros y comparación arquitectónica}
+
+Se realizó un barrido de un factor a la vez partiendo de la configuración base, midiendo en cada caso la tasa de victoria de la política \textit{greedy} resultante frente a un agente aleatorio tras un número fijo de pasos de aprendizaje. La Tabla~\ref{tab:sweep} recoge el barrido de hiperparámetros y la Tabla~\ref{tab:arch} la comparación de arquitecturas.
+
+\begin{table}[H]
+\centering
+\caption{Barrido de hiperparámetros (un factor a la vez). Tasa de victoria de la política \textit{greedy} frente a un agente aleatorio.}
+\label{tab:sweep}
+\begin{tabular}{lccccc}
+\toprule
+Configuración & lr & $\gamma$ & buffer & div. obj. & Tasa \\
+\midrule
+base               & $10^{-3}$        & 0.99 & 5\,000  & 10 & 0.40 \\
+lr $=5\times10^{-4}$ & $5\times10^{-4}$ & 0.99 & 5\,000  & 10 & 0.20 \\
+lr $=10^{-4}$       & $10^{-4}$        & 0.99 & 5\,000  & 10 & 0.15 \\
+$\gamma=0.95$       & $10^{-3}$        & 0.95 & 5\,000  & 10 & 0.45 \\
+$\gamma=0.90$       & $10^{-3}$        & 0.90 & 5\,000  & 10 & 0.50 \\
+buffer $=20$k       & $10^{-3}$        & 0.99 & 20\,000 & 10 & 0.40 \\
+objetivo rápido     & $10^{-3}$        & 0.99 & 5\,000  & 40 & 0.45 \\
+objetivo lento      & $10^{-3}$        & 0.99 & 5\,000  & 4  & 0.30 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Comparación arquitectónica (hiperparámetros base). Tasa de victoria frente a un agente aleatorio.}
+\label{tab:arch}
+\begin{tabular}{lc}
+\toprule
+Arquitectura (capas ocultas) & Tasa \\
+\midrule
+$256\times256$        & 0.25 \\
+$512\times512$        & 0.60 \\
+$512\times512\times1024$ & 0.65 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La tasa de victoria frente a un agente aleatorio es un \emph{proxy ruidoso} (pocas partidas, alta varianza), por lo que diferencias pequeñas no son significativas; de hecho, la misma topología $512\times512$ aparece con tasas distintas (0.40 y 0.60) en bloques de evaluación independientes. La señal más clara proviene de la comparación arquitectónica: a mayor capacidad, mayor tasa de victoria ($0.25 \to 0.60 \to 0.65$ al pasar de $256\times256$ a $512\times512$ y a $512\times512\times1024$). Entre los hiperparámetros, reducir el factor de descuento ($\gamma=0.90$--$0.95$) y ampliar el buffer no degradaron el desempeño, mientras que tasas de aprendizaje muy bajas lo empeoraron.
+
+\subsection{Curvas de aprendizaje}
+
+La Figura~\ref{fig:curva} muestra la evolución de la pérdida Huber suavizada y el decaimiento de $\epsilon$ junto con la tasa de victoria en auto-juego durante el entrenamiento.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{curva_aprendizaje.png}
+\caption{Curvas de entrenamiento del DQN por auto-juego: pérdida Huber suavizada (izquierda) y decaimiento de $\epsilon$ junto con la tasa de victoria en auto-juego (derecha).}
+\label{fig:curva}
+\end{figure}
+
+\subsection{Validación}
+
+La validación técnica se apoya en una batería de 122 pruebas automatizadas (\texttt{pytest}) que cubren el motor, el entorno, la heurística, el Minimax, el torneo, el ajuste de hiperparámetros y la evaluación; todas pasan. A nivel de modelo, se entrenó por auto-juego un checkpoint DQN (del orden de $1.4\times10^{4}$ episodios) que se incorporó al torneo final de la Sección~6 para una comparación directa contra Minimax a distintas profundidades.
 
 \section{Resultados}
 
