@@ -112,16 +112,16 @@ def test_minimax_promotes_to_king():
 
     Setup (verified against NEIGHBORS):
       red  @ 24 (row 6) → can move only to 28 or 29 (both row 7 = promotion)
-      red  @ 9  (row 2) → has four regular non-promotion moves
-      black@ 20         → not reachable as a capture target from either red piece
+      red  @ 9  (row 2) → has regular non-promotion moves
+      black@ 4          → keeps the game non-trivial without creating a forced capture tactic
 
-    No captures are available; the agent must choose between 6 simple moves.
+    No captures are available; the agent must choose between 4 simple moves.
     Promotion gives +2 material immediately, so the agent should pick sq 24.
     """
     board = [0] * 32
     board[24] =  1   # red – about to promote
     board[9]  =  1   # red – regular moves only
-    board[20] = -1   # black – keeps the game non-trivial
+    board[4]  = -1   # black – keeps the game non-trivial without a forced tactic
     state = _state(board)
 
     agent = MinimaxAgent(depth=3, player=1)
