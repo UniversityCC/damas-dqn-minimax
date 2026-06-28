@@ -30,10 +30,12 @@ class DQNAgent:
         target_update_freq: int = 1000,
         device: str = "cpu",
         use_target: bool = True,
+        double_dqn: bool = True,
         hidden: int | tuple[int, ...] = (512, 512),
     ):
         self.device = torch.device(device)
         self.use_target = use_target
+        self.double_dqn = double_dqn
         self.hidden = hidden
         self.online = QNetwork(hidden).to(self.device)
         self.target = QNetwork(hidden).to(self.device)
@@ -92,17 +94,13 @@ class DQNAgent:
         # Q(s, a) según la red online
         q_pred = self.online(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
-        # Target negamax: y = r - γ · max_legales Q_bootstrap(s')
-        # Si use_target=False se usa la red online para bootstrap (sin red objetivo).
-        bootstrap_net = self.target if self.use_target else self.online
+        # Target negamax: y = r - γ · best_next, con best_next el valor del mejor
+        # movimiento legal en s' (Double DQN si está activado; ver _bootstrap_values).
         with torch.no_grad():
             next_states = torch.tensor([encode(t.next_state) for t in batch],
                                        dtype=torch.float32, device=self.device)
             masks = torch.stack([legal_action_mask(t.next_state) for t in batch]).to(self.device)
-            q_next = bootstrap_net(next_states).masked_fill(~masks, float("-inf"))
-            best_next = q_next.max(dim=1).values
-            best_next = torch.where(torch.isfinite(best_next), best_next,
-                                    torch.zeros_like(best_next))  # next sin legales -> 0
+            best_next = self._bootstrap_values(next_states, masks)
             target = rewards + torch.where(dones, torch.zeros_like(rewards),
                                            -self.gamma * best_next)
 
@@ -115,6 +113,26 @@ class DQNAgent:
         if self.learn_steps % self.target_update_freq == 0:
             self.update_target()
         return float(loss.item())
+
+    def _bootstrap_values(self, next_states: torch.Tensor,
+                          masks: torch.Tensor) -> torch.Tensor:
+        """Valor del mejor movimiento legal en cada s' para el bootstrap negamax.
+
+        Con ``double_dqn`` (y red objetivo activa) la acción se SELECCIONA con la red
+        online y se EVALÚA con la red objetivo (Double DQN), reduciendo la
+        sobreestimación. En otro caso se usa el máximo de la red de bootstrap.
+        Los estados sin movimientos legales aportan 0.
+        """
+        has_legal = masks.any(dim=1)
+        if self.double_dqn and self.use_target:
+            q_online = self.online(next_states).masked_fill(~masks, float("-inf"))
+            a_star = q_online.argmax(dim=1, keepdim=True)        # selección: red online
+            best = self.target(next_states).gather(1, a_star).squeeze(1)  # evaluación: red objetivo
+        else:
+            net = self.target if self.use_target else self.online
+            q_next = net(next_states).masked_fill(~masks, float("-inf"))
+            best = q_next.max(dim=1).values
+        return torch.where(has_legal, best, torch.zeros_like(best))
 
     def update_target(self) -> None:
         """Copia dura de los pesos de la red online a la red objetivo.

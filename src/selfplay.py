@@ -17,7 +17,10 @@ for _candidate in (_HERE, _HERE / "src"):
         sys.path.insert(0, str(_candidate))
         break
 
-from damas.engine import initial_state, legal_moves, step, is_terminal, result
+from damas.engine import (
+    initial_state, legal_moves, step, is_terminal, result,
+    _JUMP_OVER, _promotion_row,
+)
 from agents.dqn import DQNAgent
 
 # ---------------------------------------------------------------------------
@@ -35,7 +38,28 @@ log = logging.getLogger("selfplay")
 # Jugar una partida completa entre el agente y sí mismo
 # ---------------------------------------------------------------------------
 
-def play_episode(agent: DQNAgent, max_steps: int = 300) -> dict:
+def _shaping_reward(state: dict, action, capture_reward: float, king_reward: float) -> float:
+    """Recompensa de shaping para el jugador que mueve en ``state`` al ejecutar ``action``.
+
+    - ``capture_reward`` por cada pieza capturada (la acción de captura es la cadena
+      completa; cada par consecutivo que es un salto come una pieza).
+    - ``king_reward`` si un peón propio corona con esta jugada.
+    Se mide desde la perspectiva del que mueve, consistente con el target negamax.
+    """
+    shaped = 0.0
+    if capture_reward:
+        captured = sum(1 for i in range(len(action) - 1)
+                       if (action[i], action[i + 1]) in _JUMP_OVER)
+        shaped += capture_reward * captured
+    if king_reward:
+        src_piece = state["board"][action[0]]
+        if abs(src_piece) == 1 and action[-1] in _promotion_row(state["turn"]):
+            shaped += king_reward
+    return shaped
+
+
+def play_episode(agent: DQNAgent, max_steps: int = 300,
+                 capture_reward: float = 0.0, king_reward: float = 0.0) -> dict:
     """Juega una partida completa por self-play.
 
     Ambos jugadores usan la MISMA red online con la política ε-greedy actual.
@@ -71,6 +95,10 @@ def play_episode(agent: DQNAgent, max_steps: int = 300) -> dict:
                 reward = -1.0         # pierde el jugador actual
         else:
             reward = 0.0
+
+        # Reward shaping (captura/coronación) desde la perspectiva del que mueve.
+        if capture_reward or king_reward:
+            reward += _shaping_reward(state, action, capture_reward, king_reward)
 
         agent.remember(state, action, reward, next_state, done)
         transitions_added += 1
@@ -136,6 +164,9 @@ def train(
     eps_end: float = 0.05,
     eps_decay_steps: int = 50_000,
     target_update_freq: int = 1_000,
+    capture_reward: float = 0.0,
+    king_reward: float = 0.0,
+    double_dqn: bool = True,
 ) -> DQNAgent:
 
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -150,6 +181,7 @@ def train(
         eps_decay_steps=eps_decay_steps,
         target_update_freq=target_update_freq,
         device=device,
+        double_dqn=double_dqn,
     )
 
     if resume_checkpoint:
@@ -178,13 +210,16 @@ def train(
             w.writerows(rows)
 
     log.info(
-        "Iniciando self-play: %d episodios | batch=%d | buffer=%d | device=%s",
+        "Iniciando self-play: %d episodios | batch=%d | buffer=%d | device=%s | "
+        "double_dqn=%s | capture_reward=%.3f | king_reward=%.3f",
         episodes, batch_size, buffer_capacity, device,
+        double_dqn, capture_reward, king_reward,
     )
 
     for ep in range(1, episodes + 1):
         # --- Jugar episodio ---
-        ep_info = play_episode(agent, max_steps=max_steps_per_episode)
+        ep_info = play_episode(agent, max_steps=max_steps_per_episode,
+                               capture_reward=capture_reward, king_reward=king_reward)
         total_transitions += ep_info["transitions"]
         result_window.append(ep_info["result"])
 
@@ -321,6 +356,13 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--log-csv",           type=str,   default=None,
                    dest="log_csv",
                    help="Ruta CSV para guardar curva de entrenamiento (ej: results/training_log.csv)")
+    p.add_argument("--capture-reward",    type=float, default=0.0,
+                   help="Reward shaping por pieza capturada (0 = desactivado)")
+    p.add_argument("--king-reward",       type=float, default=0.0,
+                   help="Reward shaping por coronación (0 = desactivado)")
+    p.add_argument("--no-double-dqn",     dest="double_dqn", action="store_false",
+                   help="Desactiva Double DQN (usa el max de la red objetivo)")
+    p.set_defaults(double_dqn=True)
     return p.parse_args()
 
 
@@ -344,6 +386,9 @@ if __name__ == "__main__":
         eps_end=args.eps_end,
         eps_decay_steps=args.eps_decay_steps,
         target_update_freq=args.target_update_freq,
+        capture_reward=args.capture_reward,
+        king_reward=args.king_reward,
+        double_dqn=args.double_dqn,
     )
 # Desde src/
 # python selfplay.py --episodes 1000 --device cpu
