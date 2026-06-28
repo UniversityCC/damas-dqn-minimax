@@ -31,11 +31,13 @@ class DQNAgent:
         device: str = "cpu",
         use_target: bool = True,
         double_dqn: bool = True,
+        soft_tau: float | None = None,
         hidden: int | tuple[int, ...] = (512, 512),
     ):
         self.device = torch.device(device)
         self.use_target = use_target
         self.double_dqn = double_dqn
+        self.soft_tau = soft_tau
         self.hidden = hidden
         self.online = QNetwork(hidden).to(self.device)
         self.target = QNetwork(hidden).to(self.device)
@@ -110,8 +112,10 @@ class DQNAgent:
         self.optimizer.step()
 
         self.learn_steps += 1
-        if self.learn_steps % self.target_update_freq == 0:
-            self.update_target()
+        if self.soft_tau is not None:
+            self.update_target()                                 # soft update (Polyak) cada paso
+        elif self.learn_steps % self.target_update_freq == 0:
+            self.update_target()                                 # copia dura periódica
         return float(loss.item())
 
     def _bootstrap_values(self, next_states: torch.Tensor,
@@ -135,9 +139,18 @@ class DQNAgent:
         return torch.where(has_legal, best, torch.zeros_like(best))
 
     def update_target(self) -> None:
-        """Copia dura de los pesos de la red online a la red objetivo.
-        No-op cuando use_target=False."""
-        if self.use_target:
+        """Sincroniza la red objetivo con la online.
+
+        Con ``soft_tau`` aplica Polyak (θ_target ← τ·θ_online + (1-τ)·θ_target),
+        pensado para llamarse en cada paso; si no, copia dura. No-op si use_target=False.
+        """
+        if not self.use_target:
+            return
+        if self.soft_tau is not None:
+            with torch.no_grad():
+                for tp, op in zip(self.target.parameters(), self.online.parameters()):
+                    tp.mul_(1.0 - self.soft_tau).add_(self.soft_tau * op.data)
+        else:
             self.target.load_state_dict(self.online.state_dict())
 
     def save(self, path: str) -> None:
