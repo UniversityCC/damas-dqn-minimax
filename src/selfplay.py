@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import random
 import sys
 import time
 from collections import deque
@@ -22,6 +23,7 @@ from damas.engine import (
     _JUMP_OVER, _promotion_row,
 )
 from agents.dqn import DQNAgent
+from agents.minimax import MinimaxAgent
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -59,14 +61,16 @@ def _shaping_reward(state: dict, action, capture_reward: float, king_reward: flo
 
 
 def play_episode(agent: DQNAgent, max_steps: int = 300,
-                 capture_reward: float = 0.0, king_reward: float = 0.0) -> dict:
-    """Juega una partida completa por self-play.
+                 capture_reward: float = 0.0, king_reward: float = 0.0,
+                 opponent=None, agent_color: int = 1) -> dict:
+    """Juega una partida completa.
 
-    Ambos jugadores usan la MISMA red online con la política ε-greedy actual.
-    Las transiciones se guardan desde el punto de vista del jugador en turno,
-    con recompensa negamax: el jugador que recibe la transición ve +1 al ganar
-    y la target negamax invierte el Q del siguiente estado (ya implementado
-    en DQNAgent.learn).
+    Sin ``opponent`` es auto-juego: ambos lados usan la red del agente (ε-greedy).
+    Con ``opponent`` (currículum), el agente juega ``agent_color`` y el oponente el
+    otro bando; **se guardan TODAS las transiciones** (también las jugadas del
+    oponente), lo cual es válido porque DQN es off-policy e inyecta demostraciones
+    expertas al buffer. Las recompensas se asignan desde la perspectiva del jugador
+    en turno y la target negamax invierte el Q de s' (ver DQNAgent.learn).
 
     Devuelve un dict con métricas de la partida.
     """
@@ -77,8 +81,11 @@ def play_episode(agent: DQNAgent, max_steps: int = 300,
     while not is_terminal(state) and steps < max_steps:
         current_turn = state["turn"]
 
-        # Selección de acción ε-greedy
-        action = agent.act(state)
+        # Selección de acción: oponente externo en su turno (currículum), si no el agente
+        if opponent is not None and current_turn != agent_color:
+            action = opponent.choose_action(state)
+        else:
+            action = agent.act(state)
 
         # Paso en el motor
         next_state = step(state, action)
@@ -167,6 +174,9 @@ def train(
     capture_reward: float = 0.0,
     king_reward: float = 0.0,
     double_dqn: bool = True,
+    soft_tau: float | None = None,
+    opponent_minimax_frac: float = 0.0,
+    opponent_minimax_depth: int = 3,
 ) -> DQNAgent:
 
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -182,6 +192,7 @@ def train(
         target_update_freq=target_update_freq,
         device=device,
         double_dqn=double_dqn,
+        soft_tau=soft_tau,
     )
 
     if resume_checkpoint:
@@ -216,10 +227,23 @@ def train(
         double_dqn, capture_reward, king_reward,
     )
 
+    mm_opponent = (MinimaxAgent(depth=opponent_minimax_depth)
+                   if opponent_minimax_frac > 0 else None)
+    if mm_opponent is not None or soft_tau is not None:
+        log.info("Fase 2: opponent_minimax_frac=%.2f (d=%d) | soft_tau=%s",
+                 opponent_minimax_frac, opponent_minimax_depth, soft_tau)
+
     for ep in range(1, episodes + 1):
+        # --- Elegir oponente del episodio (currículum vs Minimax) ---
+        if mm_opponent is not None and random.random() < opponent_minimax_frac:
+            opp, agent_color = mm_opponent, (1 if ep % 2 == 0 else -1)
+        else:
+            opp, agent_color = None, 1
+
         # --- Jugar episodio ---
         ep_info = play_episode(agent, max_steps=max_steps_per_episode,
-                               capture_reward=capture_reward, king_reward=king_reward)
+                               capture_reward=capture_reward, king_reward=king_reward,
+                               opponent=opp, agent_color=agent_color)
         total_transitions += ep_info["transitions"]
         result_window.append(ep_info["result"])
 
@@ -363,6 +387,12 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--no-double-dqn",     dest="double_dqn", action="store_false",
                    help="Desactiva Double DQN (usa el max de la red objetivo)")
     p.set_defaults(double_dqn=True)
+    p.add_argument("--soft-tau",          type=float, default=None,
+                   help="Polyak para la red objetivo (ej. 0.005); si se omite, copia dura periódica")
+    p.add_argument("--opponent-minimax-frac", type=float, default=0.0,
+                   help="Fracción de episodios jugados vs Minimax (currículum; 0 = solo auto-juego)")
+    p.add_argument("--opponent-minimax-depth", type=int, default=3,
+                   help="Profundidad del Minimax oponente del currículum")
     return p.parse_args()
 
 
@@ -389,6 +419,9 @@ if __name__ == "__main__":
         capture_reward=args.capture_reward,
         king_reward=args.king_reward,
         double_dqn=args.double_dqn,
+        soft_tau=args.soft_tau,
+        opponent_minimax_frac=args.opponent_minimax_frac,
+        opponent_minimax_depth=args.opponent_minimax_depth,
     )
 # Desde src/
 # python selfplay.py --episodes 1000 --device cpu
