@@ -27,6 +27,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from agents.dqn import DQNAgent  # noqa: E402
+from agents.hybrid import HybridAgent, dqn_value_fn  # noqa: E402
 from damas.engine import Action, State, _JUMP_OVER, initial_state, is_terminal, legal_moves, result, step  # noqa: E402
 
 
@@ -142,17 +143,23 @@ def apply_move(action: Action, actor: str) -> None:
     st.session_state.selected_square = None
 
 
-def maybe_agent_turn(agent: DQNAgent | None) -> None:
-    """Si corresponde, ejecuta automáticamente el movimiento greedy del DQN."""
+def maybe_agent_turn(mover) -> None:
+    """Si corresponde, ejecuta automáticamente el movimiento del agente.
+
+    ``mover`` puede ser un híbrido (expone ``choose_action``: DQN + búsqueda) o un
+    ``DQNAgent`` puro (juega ``act`` greedy, reactivo)."""
     state = st.session_state.game_state
-    if agent is None or is_terminal(state):
+    if mover is None or is_terminal(state):
         return
     if state["turn"] == st.session_state.human_player:
         return
     try:
-        action = agent.act(state, greedy=True)
-        apply_move(action, "DQN")
-        st.session_state.message = f"El DQN jugó: {action_text(action)}"
+        if hasattr(mover, "choose_action"):
+            action = mover.choose_action(state)        # híbrido (DQN + búsqueda)
+        else:
+            action = mover.act(state, greedy=True)     # DQN puro (reactivo)
+        apply_move(action, "Agente")
+        st.session_state.message = f"El agente jugó: {action_text(action)}"
     except Exception as exc:  # pragma: no cover - visible en UI
         st.session_state.message = f"Error al mover el agente: {exc}"
 
@@ -274,6 +281,7 @@ def main() -> None:
 
     checkpoints = checkpoint_options()
     agent: DQNAgent | None = None
+    mover = None
 
     with st.sidebar:
         st.header("Configuración")
@@ -281,9 +289,26 @@ def main() -> None:
         chosen_human = 1 if human_side_label.startswith("Rojas") else -1
 
         if checkpoints:
+            DIFICULTAD = {
+                "checkpoint_final.pt": "Fácil",
+                "checkpoint_swa_fase2.pt": "Medio",
+                "checkpoint_maestroA.pt": "Difícil",
+            }
+            _orden = {"Fácil": 0, "Medio": 1, "Difícil": 2}
+            rels = [str(p.relative_to(ROOT)) for p in checkpoints]
+            rels.sort(key=lambda r: _orden.get(DIFICULTAD.get(Path(r).name, ""), 9))
+
+            def _nivel_label(rel: str) -> str:
+                nivel = DIFICULTAD.get(Path(rel).name)
+                return f"{nivel} ({rel})" if nivel else rel
+
+            _default = next((i for i, r in enumerate(rels)
+                             if DIFICULTAD.get(Path(r).name) == "Difícil"), 0)
             selected_ckpt = st.selectbox(
-                "Checkpoint",
-                options=[str(p.relative_to(ROOT)) for p in checkpoints],
+                "Nivel del agente",
+                options=rels,
+                format_func=_nivel_label,
+                index=_default,
             )
             ckpt_path = str(ROOT / selected_ckpt)
             try:
@@ -295,7 +320,21 @@ def main() -> None:
                 agent = None
         else:
             st.warning("No hay checkpoints `.pt` en `models/` ni en `src/models/`.")
-            st.info("Copia, por ejemplo, `models/checkpoint_final.pt` o `src/models/checkpoint_final.pt` para jugar contra el DQN entrenado.")
+            st.info("Copia, por ejemplo, `models/checkpoint_maestroA.pt` para jugar contra el agente entrenado.")
+
+        if agent is not None:
+            modo = st.radio(
+                "Cómo juega el agente",
+                ["Híbrido: DQN + búsqueda (fuerte)", "DQN puro: reactivo (débil)"],
+                index=0,
+            )
+            if modo.startswith("Híbrido"):
+                depth = st.slider("Profundidad de búsqueda k", 2, 6, 5)
+                mover = HybridAgent(eval_fn=dqn_value_fn(agent.online), depth=depth)
+                st.caption(f"Evaluador del DQN + búsqueda alfa-beta k={depth} (recomendado k=5).")
+            else:
+                mover = agent
+                st.caption("DQN reactivo, sin búsqueda (mucho más débil).")
 
         st.button(
             "Nueva partida",
@@ -331,7 +370,7 @@ def main() -> None:
                 args=(choice,),
             )
 
-    maybe_agent_turn(agent)
+    maybe_agent_turn(mover)
 
     left, right = st.columns([2, 1])
     with left:
