@@ -1,0 +1,6 @@
+rank,agent,elo
+1,Minimax(d=6),1776.9
+2,Minimax(d=5),1673.0
+3,Minimax(d=4),1547.1
+4,DQN(ep53540),1266.4
+5,Minimax(d=3),1236.5
