@@ -204,7 +204,7 @@ La tasa de victoria frente a un agente aleatorio es un \emph{proxy ruidoso} (poc
 
 \subsection{Mejoras de estabilización}
 
-El DQN base entrenado solo por auto-juego con recompensa dispersa no superaba a Minimax, y su rendimiento contra el rival oscilaba a lo largo del entrenamiento (mejoraba y luego se degradaba). Para estabilizarlo se incorporaron cuatro mejoras, todas dentro del paradigma DQN: (i) \emph{reward shaping} denso, que premia capturas y coronaciones desde la perspectiva del jugador en turno para densificar la señal de aprendizaje; (ii) \emph{Double DQN}, que desacopla la selección de la acción (red \textit{online}) de su evaluación (red objetivo) para reducir la sobreestimación de los valores~\cite{vanhasselt2016}; (iii) \emph{currículum} contra Minimax: una fracción de los episodios se juega contra el agente de búsqueda y se almacenan todas las transiciones, aportando un ancla externa y demostraciones expertas al \textit{buffer} (válido por ser DQN off-policy); y (iv) \emph{actualización suave} (Polyak) de la red objetivo en lugar de copia dura~\cite{lillicrap2016}. Como el entrenamiento por auto-juego sigue siendo oscilatorio, se emplea además promediado de pesos (\emph{Stochastic Weight Averaging})~\cite{izmailov2018} de los mejores \textit{checkpoints} para obtener un modelo más estable que cualquiera individual.
+El DQN base entrenado solo por auto-juego con recompensa dispersa no superaba a Minimax, y su rendimiento contra el rival oscilaba a lo largo del entrenamiento (mejoraba y luego se degradaba). Para estabilizarlo se incorporaron cuatro mejoras, todas dentro del paradigma DQN: (i) \emph{modelado de recompensas} (\textit{reward shaping}) denso, que premia capturas y coronaciones desde la perspectiva del jugador en turno para densificar la señal de aprendizaje; (ii) \emph{Double DQN}, que desacopla la selección de la acción (red \textit{online}) de su evaluación (red objetivo) para reducir la sobreestimación de los valores~\cite{vanhasselt2016}; (iii) \emph{currículum} contra Minimax: una fracción de los episodios se juega contra el agente de búsqueda y se almacenan todas las transiciones, aportando un ancla externa y demostraciones expertas al \textit{buffer} (válido por ser DQN off-policy); y (iv) \emph{actualización suave} (Polyak) de la red objetivo en lugar de copia dura~\cite{lillicrap2016}. Como el entrenamiento por auto-juego sigue siendo oscilatorio, se emplea además promediado de pesos (\emph{Stochastic Weight Averaging})~\cite{izmailov2018} de los mejores \textit{checkpoints} para obtener un modelo más estable que cualquiera individual.
 
 \subsection{Curvas de aprendizaje}
 
@@ -217,33 +217,33 @@ La Figura~\ref{fig:curva} muestra la evolución de la pérdida Huber suavizada y
 \label{fig:curva}
 \end{figure}
 
-La pérdida Huber desciende y se estabiliza conforme avanza el entrenamiento. Sin embargo, conviene una lectura cuidadosa: una pérdida baja indica que la red ajusta bien su objetivo de Bellman \emph{sobre los datos de auto-juego}, pero no se traduce directamente en mayor fuerza frente a Minimax. De hecho, al evaluar checkpoints intermedios contra el rival se observa un comportamiento \emph{oscilatorio} (el rendimiento sube y baja), síntoma de la inestabilidad propia del auto-juego puro. Por ello el mejor modelo no es necesariamente el último \textit{checkpoint}, y resulta clave la selección/promediado de los mejores (Sección de mejoras de estabilización). El win-rate en auto-juego ronda el 50\,\% por construcción —ambos bandos comparten la red—, por lo que es poco informativo como medida de fuerza; la medida válida es la evaluación contra Minimax (Sección~6).
+La pérdida Huber desciende y se estabiliza conforme avanza el entrenamiento. Sin embargo, es preciso interpretar esta métrica con cautela: una pérdida baja indica que la red ajusta bien su objetivo de Bellman \emph{sobre los datos de auto-juego}, pero no se traduce directamente en mayor fuerza frente a Minimax. De hecho, al evaluar checkpoints intermedios contra el rival se observa un comportamiento \emph{oscilatorio} (el rendimiento sube y baja), síntoma de la inestabilidad propia del auto-juego puro. Por ello el mejor modelo no es necesariamente el último \textit{checkpoint}, y resulta clave la selección/promediado de los mejores (Sección de mejoras de estabilización). La tasa de victoria en auto-juego ronda el 50\,\% por construcción —ambos bandos comparten la red—, por lo que es poco informativo como medida de fuerza; la medida válida es la evaluación contra Minimax (Sección~6).
 
 \subsection{Validación}
 
-La validación técnica se apoya en una batería de 151 pruebas automatizadas (\texttt{pytest}) que cubren el motor, el entorno, la heurística, el Minimax, el torneo, el ajuste de hiperparámetros, las mejoras del DQN (reward shaping, Double DQN, soft update, promediado de pesos) y la evaluación; todas pasan. A nivel de modelo, se entrenó por auto-juego un checkpoint DQN de $4\,000$ episodios ($\approx 6.5\times10^{4}$ pasos de aprendizaje) que se incorporó al torneo final de la Sección~6.
+La validación técnica se apoya en una batería de 151 pruebas automatizadas (\texttt{pytest}) que cubren el motor, el entorno, la heurística, el Minimax, el torneo, el ajuste de hiperparámetros, las mejoras del DQN (modelado de recompensas, Double DQN, actualización suave, promediado de pesos) y la evaluación; todas pasan. A nivel de modelo, se entrenó por auto-juego un checkpoint DQN de $4\,000$ episodios ($\approx 6.5\times10^{4}$ pasos de aprendizaje) que se incorporó al torneo final de la Sección~6.
 
-Un punto metodológico importante es \emph{cómo} se mide la fuerza del DQN. La evaluación \textit{greedy} estándar es engañosa: como el DQN \textit{greedy} y Minimax son ambos deterministas, todas las partidas desde el estado inicial son idénticas y solo varían por el color, por lo que el torneo aporta esencialmente dos muestras por confrontación. Para obtener una medida estadísticamente significativa se añadió una \emph{evaluación estocástica} en la que el DQN juega con un $\epsilon$ pequeño que introduce variedad, sobre 30 partidas con semillas pareadas. Además, se distingue el oponente de \emph{entrenamiento} (Minimax usado en el currículum) del oponente \emph{held-out} (una profundidad no vista en entrenamiento), para medir generalización real y no sobreajuste al rival de práctica. Esta evaluación estocástica confirma que el DQN vence con holgura a Minimax de baja profundidad y, mediante promediado de pesos (SWA) de los mejores \textit{checkpoints}, un único modelo alcanza del orden de 80\,\% de victorias contra Minimax(d=3) y 60\,\% contra Minimax(d=4).
+Un punto metodológico importante es \emph{cómo} se mide la fuerza del DQN. La evaluación \textit{greedy} estándar es engañosa: como el DQN \textit{greedy} y Minimax son ambos deterministas, todas las partidas desde el estado inicial son idénticas y solo varían por el color, por lo que el torneo aporta esencialmente dos muestras por confrontación. Para obtener una medida estadísticamente significativa se añadió una \emph{evaluación estocástica} en la que el DQN juega con un $\epsilon$ pequeño que introduce variedad, sobre 30 partidas con semillas pareadas. Además, se distingue el oponente de \emph{entrenamiento} (Minimax usado en el currículum) del oponente \emph{no visto} (\textit{held-out}: una profundidad no usada en el currículum), para medir generalización real y no sobreajuste al rival de práctica. Esta evaluación estocástica confirma que el DQN vence con holgura a Minimax de baja profundidad y, mediante promediado de pesos (SWA) de los mejores \textit{checkpoints}, un único modelo alcanza del orden de 80\,\% de victorias contra Minimax(d=3) y 60\,\% contra Minimax(d=4).
 
 La Tabla~\ref{tab:progresion} resume la \emph{progresión} de las mejoras, manteniendo la trazabilidad del trabajo: cada paso aporta sobre el anterior, y el promediado de pesos (SWA) es la mejora final que consolida un único modelo fuerte tanto contra (d=3) como contra (d=4).
 
 \begin{table}[H]
 \centering
-\caption{Progresión de las mejoras: tasa de victoria del DQN (evaluación estocástica, 30 partidas) contra Minimax. La columna d=4 es \emph{held-out} (no usada en el currículum) y, por tanto, la comparación más limpia.}
+\caption{Progresión de las mejoras: tasa de victoria del DQN (evaluación estocástica, 30 partidas) contra Minimax. La columna d=4 es \emph{de reserva} (no usada en el currículum) y, por tanto, la comparación más limpia.}
 \begin{tabular}{lcc}
 \toprule
 Configuración & vs d=3 & vs d=4 \\
 \midrule
 DQN base (recompensa dispersa)            & 0\,\%        & 0\,\%  \\
-\;\;+ Fase 1 (reward shaping + Double DQN) & 73\,\%       & 3\,\%  \\
-\;\;+ Fase 2 (currículum + soft update)    & 57\,\%$^{*}$ & 67\,\% \\
+\;\;+ Fase 1 (modelado de recompensas + Double DQN) & 73\,\%       & 3\,\%  \\
+\;\;+ Fase 2 (currículum + actualización suave)    & 57\,\%$^{*}$ & 67\,\% \\
 \;\;+ SWA (promediado de checkpoints)      & 80\,\%       & 63\,\% \\
 \bottomrule
 \end{tabular}
 \label{tab:progresion}
 \end{table}
 
-\noindent{\footnotesize $^{*}$ En la Fase 2, Minimax(d=3) es el oponente de \emph{entrenamiento} (currículum); por eso la métrica fiel de generalización es la columna d=4 (held-out).}
+\noindent{\footnotesize $^{*}$ En la Fase 2, Minimax(d=3) es el oponente de \emph{entrenamiento} (currículum); por eso la métrica fiel de generalización es la columna d=4 (no vista en el currículum).}
 
 \section{Resultados}
 
@@ -261,9 +261,9 @@ Con el checkpoint obtenido tras $4\,000$ episodios se realizó una evaluación d
 Métrica & Valor \\
 \midrule
 Partidas jugadas      & 30 \\
-Victorias DQN         & 15 \hspace{0.5em} (50.0\,\%) \\
-Derrotas DQN          & 0 \hspace{0.5em} (0.0\,\%) \\
-Empates               & 15 \hspace{0.5em} (50.0\,\%) \\
+Victorias DQN         & 15 \hspace{0.5em} (50\,\%) \\
+Derrotas DQN          & 0 \hspace{0.5em} (0\,\%) \\
+Empates               & 15 \hspace{0.5em} (50\,\%) \\
 Recompensa media      & $+0.500$ \\
 Longitud media        & 91.5 semijugadas \\
 Tiempo por jugada DQN & 0.37 ms \\
@@ -279,7 +279,7 @@ Se realizó un torneo round-robin entre el DQN y cuatro variantes de Minimax (pr
 
 \begin{table}[H]
 \centering
-\caption{Clasificación ELO tras el torneo final.}
+\caption{Clasificación ELO tras el torneo final. La etiqueta \texttt{ep} del DQN indica pasos de aprendizaje ($\approx 4000$ episodios), no episodios.}
 \begin{tabular}{clc}
 \toprule
 Posición & Agente & ELO \\
@@ -296,7 +296,7 @@ Posición & Agente & ELO \\
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\textwidth]{torneo_final.png}
-\caption{Izquierda: clasificación ELO por agente. Derecha: heatmap de win-rate entre todos los pares de agentes (cada celda muestra la fracción de victorias del agente de la fila sobre el de la columna).}
+\caption{Izquierda: clasificación ELO por agente. Derecha: mapa de calor de la tasa de victoria entre todos los pares de agentes (cada celda muestra la fracción de victorias del agente de la fila sobre el de la columna).}
 \label{fig:torneo-final}
 \end{figure}
 
@@ -315,11 +315,11 @@ Esta no-monotonía aparente —ganar/empatar a (d=6) pero perder a (d=5)— es u
 
 Los resultados confirman que la profundidad de búsqueda determina la fuerza de Minimax de forma monotónica: cada nivel adicional mejora el ELO en aproximadamente 90--180 puntos. Este comportamiento es coherente con la teoría, ya que una mayor profundidad permite al agente anticipar consecuencias más lejanas dentro del mismo árbol de búsqueda con la misma heurística material--posicional--movilidad.
 
-El resultado más relevante es que el DQN, tras las mejoras de estabilización, pasa de perder todas sus partidas a ser \emph{competitivo contra Minimax de baja profundidad}: no pierde contra (d=3) ni (d=4) y se sitúa 3.\textsuperscript{o} en la clasificación ELO. La pieza decisiva fue el currículum contra Minimax: entrenar contra un oponente fijo y fuerte (ancla externa), almacenando sus jugadas como demostraciones expertas, rompió el colapso de distribución del auto-juego puro y permitió generalizar. La métrica \emph{held-out} (una profundidad no usada en el currículum) confirmó que la mejora es real y no un sobreajuste al rival de práctica.
+El resultado más relevante es que el DQN, tras las mejoras de estabilización, pasa de perder todas sus partidas a ser \emph{competitivo contra Minimax de baja profundidad}: no pierde contra (d=3) ni (d=4) y se sitúa tercero en la clasificación ELO. La pieza decisiva fue el currículum contra Minimax: entrenar contra un oponente fijo y fuerte (ancla externa), almacenando sus jugadas como demostraciones expertas, rompió el colapso de distribución del auto-juego puro y permitió generalizar. La métrica con el oponente no visto (una profundidad no usada en el currículum) confirmó que la mejora es real y no un sobreajuste al rival de práctica.
 
-El heatmap de win-rate (Figura~\ref{fig:torneo-final}) muestra además que la relación de dominancia entre los Minimax no es transitiva de forma perfecta: Minimax(d=3) obtiene 50\,\% contra Minimax(d=6), lo que se explica por la alternancia de colores y la repetición determinista de trayectorias. Dos agentes deterministas que parten del mismo estado inicial y alternan colores producen exactamente dos trayectorias distintas, por lo que el 50\,\% puede reflejar que uno gana siempre con rojas y el otro con negras.
+El mapa de calor de la tasa de victoria (Figura~\ref{fig:torneo-final}) muestra además que la relación de dominancia entre los Minimax no es transitiva de forma perfecta: Minimax(d=3) obtiene 50\,\% contra Minimax(d=6), lo que se explica por la alternancia de colores y la repetición determinista de trayectorias. Dos agentes deterministas que parten del mismo estado inicial y alternan colores producen exactamente dos trayectorias distintas, por lo que el 50\,\% puede reflejar que uno gana siempre con rojas y el otro con negras.
 
-Respecto a la dinámica de entrenamiento, encontramos que \emph{más episodios no es la palanca}: el rendimiento contra Minimax oscila a lo largo del entrenamiento y extender la corrida no lo mejora de forma estable (incluso puede degradarlo). La causa es la inestabilidad del auto-juego puro: objetivo móvil, olvido catastrófico por un buffer finito y colapso de la distribución de estados. Lo que sí ayuda es estabilizar (currículum, actualización suave de la red objetivo, buffer amplio) y, sobre todo, \emph{seleccionar o promediar los mejores checkpoints} mediante SWA, ya que el último checkpoint rara vez es el mejor. Cruzar el techo estructural frente a búsquedas profundas (d$\geq$5) requeriría incorporar búsqueda en el momento de decidir (p.\,ej. MCTS, al estilo de AlphaZero~\cite{silver2018}), lo que excede el alcance de este trabajo.
+Respecto a la dinámica de entrenamiento, encontramos que \emph{aumentar la cantidad de episodios no es el factor determinante}: el rendimiento contra Minimax oscila a lo largo del entrenamiento y extender la corrida no lo mejora de forma estable (incluso puede degradarlo). La causa es la inestabilidad del auto-juego puro: objetivo móvil, olvido catastrófico por un buffer finito y colapso de la distribución de estados. Lo que sí ayuda es estabilizar (currículum, actualización suave de la red objetivo, buffer amplio) y, sobre todo, \emph{seleccionar o promediar los mejores checkpoints} mediante SWA, ya que el último checkpoint rara vez es el mejor. Cruzar el techo estructural frente a búsquedas profundas (d$\geq$5) requeriría incorporar búsqueda en el momento de decidir (p.\,ej. MCTS, al estilo de AlphaZero~\cite{silver2018}), lo que excede el alcance de este trabajo.
 
 \section{Conclusiones}
 
@@ -327,7 +327,7 @@ Se completó una plataforma funcional y evaluada para experimentar con agentes d
 
 Los experimentos confirman tres resultados principales. Primero, la infraestructura de evaluación es correcta: el módulo de torneo captura diferencias de fuerza entre agentes y la clasificación ELO refleja el orden esperado por profundidad de búsqueda. Segundo, con mejoras de estabilización (recompensa densa, Double DQN, currículum contra Minimax, actualización suave de la red objetivo y promediado de pesos) el DQN se vuelve competitivo contra Minimax de baja profundidad: alcanza el 3.\textsuperscript{er} lugar en la clasificación ELO y no pierde contra (d=3) ni (d=4); no obstante, persiste un techo estructural frente a búsquedas profundas (d$\geq$5) por la ausencia de búsqueda en el momento de decidir. Tercero, el barrido de hiperparámetros muestra que las tasas de aprendizaje bajas degradan el rendimiento y que la arquitectura $512\times512$ ofrece la mejor relación capacidad--costo evaluada en este estudio.
 
-El paso siguiente es ejecutar un entrenamiento extendido de varios miles de episodios, aplicar la configuración óptima identificada en el barrido ($\gamma=0.90$, $lr=10^{-3}$, arquitectura $512\times512$) y comparar el DQN resultante contra todo el espectro de Minimax. Los notebooks reproducibles del repositorio permiten regenerar todas las figuras automáticamente una vez disponible el nuevo checkpoint.
+El trabajo futuro se orienta a consolidar la reproducibilidad del entorno para la entrega final y, dada la evidencia de un techo estructural, a evaluar la incorporación de búsqueda en el momento de decidir —por ejemplo, Monte Carlo Tree Search al estilo de AlphaZero~\cite{silver2018}— para superar las limitaciones de un agente puramente reactivo frente a búsquedas profundas. Asimismo, se plantea repetir los experimentos con varias semillas para acotar la varianza de las métricas. Los notebooks reproducibles del repositorio permiten regenerar todas las figuras automáticamente.
 
 \section{Bibliografía}
 
