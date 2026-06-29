@@ -84,17 +84,67 @@ Datos: `results/evaluator_quality.csv`.
 4. **El checkpoint final no es el mejor:** ep2500 (86 % NP vs d=4) supera al final (64 %).
    Conviene seleccionar el checkpoint por evaluación, no usar siempre el último.
 
+## 4. Maestro A: subir el techo del evaluador entrenándolo CON búsqueda
+
+El límite del punto 3 no es del *entrenamiento* en abstracto, sino del **maestro**: el target
+`y = r − γ·max Q(s')` solo mira **una jugada** (1-ply), así que la red nunca recibe la verdad
+táctica de varias jugadas y su evaluación tiene techo. La cura es **cambiar el maestro**: que
+el target use una **búsqueda negamax de profundidad d en s'** (la red como evaluador de hojas),
+inyectando lookahead táctico a la señal de aprendizaje (idea de *expert iteration* / AlphaZero).
+Implementado con el flag `--search-target-depth` (ver `agents/dqn.py::_search_bootstrap_values`).
+
+**Experimento A/B controlado:** desde el MISMO checkpoint (SWA) y con las MISMAS 800 épocas de
+finetuning, se entrenan dos modelos que solo difieren en el maestro: el viejo (1-ply, *control*)
+y el nuevo (búsqueda d=2, *Maestro A*). Se reevalúan con la misma curva (híbrido k=3 vs d=4/d=5).
+
+![A/B controlado](results/maestroA_ab_control.png)
+
+| Maestro (finetuning desde SWA) | vs d=4 (W) | vs d=5 (W) |
+|--------------------------------|-----------|-----------|
+| Control (1-ply, el viejo)      | 0–29 %    | **0–7 %** (≈ plano) |
+| **Maestro A (búsqueda d=2)**   | **71 %**  | **21–57 %** |
+
+Como el control queda plano con idéntico warm-start y épocas, la mejora es **causalmente del
+maestro nuevo**, no de "entrenar más". Datos: `results/maestroA_eval_curve.csv`,
+`results/maestroA_control_eval_curve.csv`.
+
+**Matiz clave — evaluador vs jugador:** el Maestro A fortalece a la red como **evaluador**
+(`V(s)=max_a Q(s,a)`, que la búsqueda explota), **no como jugador reactivo** (`argmax_a Q`).
+Medido como DQN puro (k=1, sin búsqueda) el modelo NO mejora e incluso empeora; la ganancia se
+cosecha **a través de la búsqueda**. Es decir: la búsqueda sigue siendo **irreducible**, pero el
+Maestro A mueve parte de su costo del *inference* al *training* — con un evaluador entrenado-con-
+búsqueda, una búsqueda **corta** rinde como una profunda con el evaluador viejo.
+
+## 5. El agente final: vence a TODAS las profundidades
+
+Combinando lo anterior —evaluador Maestro A + búsqueda k=5 en inferencia— se obtiene un agente
+desplegable (`models/checkpoint_maestroA.pt` + el buscador del híbrido). Evaluación robusta de
+**40 partidas** por profundidad, aperturas aleatorias y semillas pareadas:
+
+| Oponente | W / L / D | Victorias | No-pierde | ms/jugada |
+|----------|-----------|-----------|-----------|-----------|
+| Minimax d=3 | 39 / 0 / 1 | **97.5 %** | 100 % | 58 |
+| Minimax d=4 | 37 / 0 / 3 | **92.5 %** | 100 % | 72 |
+| Minimax d=5 | 37 / 0 / 3 | **92.5 %** | 100 % | 80 |
+| Minimax d=6 | 33 / 2 / 5 | **82.5 %** | 95 %  | 71 |
+
+Solo **2 derrotas en 160 partidas**. El muro d=5/d=6 (antes 0 % victorias) queda en 92.5 %/82.5 %.
+Datos: `results/agente_final_vs_minimax.csv`.
+
 ## Conclusión
 
-Para vencer a Minimax a **toda** profundidad, la palanca demostrada es la **búsqueda en
-inferencia** (híbrido a k≥5), no más entrenamiento. El entrenamiento fortalece el evaluador
-solo hasta un techo (cercano al de una heurística manual) y no mueve el muro d=5/d=6. La
-formulación honesta del resultado:
+El RL reactivo (1-ply) choca contra un muro estructural frente a búsqueda profunda. Hay **dos
+palancas complementarias** para cruzarlo, y combinarlas da un agente que vence a Minimax en
+**todas** las profundidades (d=3 a d=6):
 
-> *El RL puro pierde frente a búsqueda profunda; un evaluador aprendido + búsqueda ligera la
-> alcanza solo a profundidad comparable, y ese evaluador no supera a una heurística a mano
-> (y cuesta más). La profundidad de búsqueda —no la cantidad de entrenamiento— es el factor
-> dominante.*
+1. **Búsqueda en inferencia** (híbrido): da el *lookahead* que al DQN reactivo le falta.
+2. **Búsqueda en el entrenamiento** (Maestro A): sube el techo del **evaluador**, de modo que
+   una búsqueda corta basta. La búsqueda es irreducible, pero su costo se reparte training/inference.
+
+> *El RL puro pierde frente a búsqueda profunda. Un evaluador aprendido entrenado CON búsqueda,
+> combinado con búsqueda en inferencia, no solo cruza el muro d=5/d=6 sino que lo domina
+> (92.5 %/82.5 % de victorias). El evaluador mejora la calidad de juicio; la búsqueda la convierte
+> en jugadas.*
 
 ## Reproducir
 
@@ -114,4 +164,16 @@ OMP_NUM_THREADS=4 .venv/bin/python src/eval/evaluator_quality.py \
 # 3) Híbrido cost-matched vs Minimax profundo
 OMP_NUM_THREADS=4 .venv/bin/python src/eval/hybrid_eval.py \
   --eval dqn --checkpoint models/checkpoint_swa_fase2.pt --depth 5 --opp-depths 5 6 --games 10
+
+# 4) Maestro A: finetuning con target por BÚSQUEDA (warm-start desde el SWA)
+OMP_NUM_THREADS=4 .venv/bin/python src/selfplay.py --episodes 800 --device cpu \
+  --gamma 0.90 --lr 0.001 --buffer-capacity 200000 --eps-decay-steps 60000 \
+  --capture-reward 0.05 --king-reward 0.2 --soft-tau 0.005 \
+  --opponent-minimax-frac 0.5 --opponent-minimax-depth 3 \
+  --search-target-depth 2 --checkpoint models/checkpoint_swa_fase2.pt \
+  --checkpoint-dir models/maestroA --checkpoint-every 200
+
+# 5) Agente final desplegable (Maestro A + híbrido k=5) vs todas las profundidades
+OMP_NUM_THREADS=4 .venv/bin/python src/eval/hybrid_eval.py \
+  --eval dqn --checkpoint models/checkpoint_maestroA.pt --depth 5 --opp-depths 3 4 5 6 --games 40
 ```

@@ -177,6 +177,7 @@ def train(
     soft_tau: float | None = None,
     opponent_minimax_frac: float = 0.0,
     opponent_minimax_depth: int = 3,
+    search_target_depth: int | None = None,
 ) -> DQNAgent:
 
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -193,6 +194,7 @@ def train(
         device=device,
         double_dqn=double_dqn,
         soft_tau=soft_tau,
+        search_target_depth=search_target_depth,
     )
 
     if resume_checkpoint:
@@ -393,6 +395,9 @@ def _parse_args() -> argparse.Namespace:
                    help="Fracción de episodios jugados vs Minimax (currículum; 0 = solo auto-juego)")
     p.add_argument("--opponent-minimax-depth", type=int, default=3,
                    help="Profundidad del Minimax oponente del currículum")
+    p.add_argument("--search-target-depth", type=int, default=None,
+                   help="Maestro A: target bootstrap por búsqueda negamax de esta profundidad "
+                        "en s' (en vez de max Q(s')); inyecta lookahead táctico al aprendizaje")
     return p.parse_args()
 
 
@@ -420,6 +425,7 @@ if __name__ == "__main__":
         king_reward=args.king_reward,
         double_dqn=args.double_dqn,
         soft_tau=args.soft_tau,
+        search_target_depth=args.search_target_depth,
         opponent_minimax_frac=args.opponent_minimax_frac,
         opponent_minimax_depth=args.opponent_minimax_depth,
     )
