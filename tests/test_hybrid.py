@@ -121,3 +121,18 @@ def test_hybrid_eval_cuenta_partidas_y_costo():
     r = evaluate_vs_depth(hy, opp_depth=3, games=4, opening_plies=2, max_half=80)
     assert r["wins"] + r["losses"] + r["draws"] == 4
     assert r["nodes_per_move"] > 0               # se midió el costo en nodos
+
+
+# --------------------------------------------------------------------------- #
+# Experimento de calidad del evaluador (orden temporal de los snapshots)
+# --------------------------------------------------------------------------- #
+
+def test_evaluator_quality_ordena_snapshots_por_entrenamiento():
+    """first -> epNNNNNN creciente -> final, para que la curva sea temporalmente correcta."""
+    from pathlib import Path
+    from eval.evaluator_quality import _episode_order
+    names = ["checkpoint_final.pt", "checkpoint_ep001000.pt",
+             "checkpoint_first.pt", "checkpoint_ep000500.pt"]
+    ordered = sorted(names, key=lambda n: _episode_order(Path(n)))
+    assert ordered == ["checkpoint_first.pt", "checkpoint_ep000500.pt",
+                       "checkpoint_ep001000.pt", "checkpoint_final.pt"]
