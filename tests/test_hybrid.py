@@ -90,6 +90,12 @@ def test_hibrido_heuristica_juega_legal():
     assert a in legal_moves(initial_state())
 
 
+def test_iterative_deepening_por_tiempo_juega_legal():
+    hy = HybridAgent(eval_fn=heuristic_value_fn(), time_budget=0.05)
+    a = hy.choose_action(initial_state())
+    assert a in legal_moves(initial_state())
+
+
 # --------------------------------------------------------------------------- #
 # Evaluador DQN (requiere torch)
 # --------------------------------------------------------------------------- #
@@ -103,3 +109,15 @@ def test_dqn_value_fn_y_hibrido_juegan_legal():
     assert isinstance(fn(initial_state()), float)
     hy = HybridAgent(eval_fn=fn, depth=2)
     assert hy.choose_action(initial_state()) in legal_moves(initial_state())
+
+
+# --------------------------------------------------------------------------- #
+# Módulo de evaluación cost-matched
+# --------------------------------------------------------------------------- #
+
+def test_hybrid_eval_cuenta_partidas_y_costo():
+    from eval.hybrid_eval import evaluate_vs_depth
+    hy = HybridAgent(eval_fn=heuristic_value_fn(), depth=2, use_cache=False)
+    r = evaluate_vs_depth(hy, opp_depth=3, games=4, opening_plies=2, max_half=80)
+    assert r["wins"] + r["losses"] + r["draws"] == 4
+    assert r["nodes_per_move"] > 0               # se midió el costo en nodos
