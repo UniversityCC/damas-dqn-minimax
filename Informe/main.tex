@@ -202,6 +202,10 @@ $512\times512\times1024$ & 0.65 \\
 
 La tasa de victoria frente a un agente aleatorio es un \emph{proxy ruidoso} (pocas partidas, alta varianza), por lo que diferencias pequeñas no son significativas. La señal más clara proviene de la comparación arquitectónica: a mayor capacidad, mayor tasa de victoria ($0.25 \to 0.60 \to 0.65$). Entre los hiperparámetros, reducir el factor de descuento ($\gamma=0.90$--$0.95$) y ampliar el buffer no degradaron el desempeño, mientras que tasas de aprendizaje muy bajas ($lr=10^{-4}$) lo empeoraron notablemente.
 
+\subsection{Mejoras de estabilización}
+
+El DQN base entrenado únicamente por auto-juego con recompensa dispersa no superaba a Minimax y su rendimiento contra el rival oscilaba durante el entrenamiento. Para estabilizarlo se incorporaron, dentro del paradigma DQN, cuatro técnicas: (i) \emph{modelado de recompensas} (\textit{reward shaping}) denso, que premia capturas y coronaciones desde la perspectiva del jugador en turno para densificar la señal de aprendizaje; (ii) \emph{Double DQN}, que desacopla la selección de la acción (red \textit{online}) de su evaluación (red objetivo) para reducir la sobreestimación de los valores~\cite{vanhasselt2016}; (iii) \emph{currículo} contra Minimax, en el que una fracción de los episodios se juega contra el agente de búsqueda y se almacenan todas las transiciones, aportando un ancla externa y demostraciones expertas al \textit{buffer} (válido por ser DQN off-policy); y (iv) \emph{actualización suave} (Polyak) de la red objetivo en lugar de copia dura~\cite{lillicrap2016}. Dado que el auto-juego sigue siendo oscilatorio, se aplica adicionalmente promediado de pesos (\emph{Stochastic Weight Averaging})~\cite{izmailov2018} de los mejores \textit{checkpoints} para obtener un modelo más estable que cualquiera individual.
+
 \subsection{Curvas de aprendizaje}
 
 La Figura~\ref{fig:curva} muestra la evolución de la pérdida Huber suavizada y el decaimiento de $\epsilon$ junto con la tasa de victoria en auto-juego durante el entrenamiento de 4\,000 episodios.
@@ -270,18 +274,42 @@ Posición & Agente & ELO \\
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\textwidth]{torneo_final.png}
-\caption{Izquierda: clasificación ELO por agente. Derecha: heatmap de win-rate entre todos los pares de agentes (cada celda muestra la fracción de victorias del agente de la fila sobre el de la columna).}
+\caption{Izquierda: clasificación ELO por agente. Derecha: mapa de calor de la tasa de victoria entre todos los pares de agentes (cada celda muestra la fracción de victorias del agente de la fila sobre el de la columna).}
 \label{fig:torneo-final}
 \end{figure}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.92\textwidth]{torneo_profundidades.png}
-\caption{Win-rate del DQN frente a Minimax a profundidades 3, 4, 5 y 6. Izquierda: porcentaje de victorias. Derecha: distribución de resultados por profundidad.}
+\caption{Tasa de victoria del DQN frente a Minimax a profundidades 3, 4, 5 y 6. Izquierda: porcentaje de victorias. Derecha: distribución de resultados por profundidad.}
 \label{fig:torneo-prof}
 \end{figure}
 
 El resultado más destacado del torneo es que el DQN(ep64846) supera a Minimax(d=4) y ocupa el tercer lugar con ELO 1\,518.4, por encima de los dos Minimax de menor profundidad. El DQN no pierde ninguna partida frente a Minimax(d=3), Minimax(d=4) ni Minimax(d=6), obteniendo 10 victorias y 10 empates en cada enfrentamiento (50\,\% de win-rate). El único oponente que lo derrota de forma contundente es Minimax(d=5), contra quien pierde las 20 partidas sin ganar ni empatar ninguna.
+
+\subsection{Validación robusta: evaluación estocástica}
+
+El torneo determinista anterior tiene una limitación: como el DQN \textit{greedy} y Minimax son ambos deterministas, todas las partidas desde el estado inicial son idénticas y solo varían por el color, de modo que cada confrontación aporta esencialmente dos muestras. Para una medida estadísticamente significativa se realizó una \emph{evaluación estocástica}, en la que el DQN juega con un $\epsilon$ pequeño que introduce variedad, sobre 30 partidas con semillas pareadas, distinguiendo además el oponente de \emph{entrenamiento} (Minimax del currículo) del oponente de \emph{reserva} (una profundidad no usada en el entrenamiento).
+
+Esta evaluación matiza el resultado del torneo. El aparente buen desempeño del DQN frente a Minimax(d=6) en el torneo determinista es un artefacto de las dos trayectorias deterministas: bajo evaluación estocástica el agente no obtiene victorias contra (d=5) ni (d=6), lo que evidencia un \emph{techo estructural} a profundidad alta, coherente con que el DQN decide sin búsqueda hacia adelante. Superarlo requeriría incorporar búsqueda en el momento de decidir, como Monte Carlo Tree Search al estilo de AlphaZero~\cite{silver2018}. En cambio, su superioridad contra (d=3) y (d=4) sí es robusta. La Tabla~\ref{tab:progresion} resume la progresión de las mejoras (tasa de victoria estocástica): el promediado de pesos (SWA) consolida un único modelo fuerte contra ambas profundidades de reserva.
+
+\begin{table}[H]
+\centering
+\caption{Progresión de las mejoras: tasa de victoria del DQN (evaluación estocástica, 30 partidas) contra Minimax. La columna d=4 es de reserva (no usada en el currículo) y, por tanto, la comparación más limpia.}
+\begin{tabular}{lcc}
+\toprule
+Configuración & vs d=3 & vs d=4 \\
+\midrule
+DQN base (recompensa dispersa)                  & 0\,\%        & 0\,\%  \\
+\;\;+ Fase 1 (modelado de recompensas + Double DQN) & 73\,\%   & 3\,\%  \\
+\;\;+ Fase 2 (currículo + actualización suave)   & 57\,\%$^{*}$ & 67\,\% \\
+\;\;+ SWA (promediado de \textit{checkpoints})   & 80\,\%       & 63\,\% \\
+\bottomrule
+\end{tabular}
+\label{tab:progresion}
+\end{table}
+
+\noindent{\footnotesize $^{*}$ En la Fase 2, Minimax(d=3) es el oponente de entrenamiento; por eso la métrica fiel de generalización es la columna d=4.}
 
 \section{Discusión}
 
@@ -329,6 +357,26 @@ Human-level control through deep reinforcement learning.
 R. S. Sutton and A. G. Barto.
 \textit{Reinforcement Learning: An Introduction}.
 MIT Press, 2nd edition, 2018.
+
+\bibitem{vanhasselt2016}
+H. van Hasselt, A. Guez, and D. Silver.
+Deep reinforcement learning with double Q-learning.
+\textit{Proceedings of the AAAI Conference on Artificial Intelligence}, 30(1), 2016.
+
+\bibitem{lillicrap2016}
+T. P. Lillicrap et al.
+Continuous control with deep reinforcement learning.
+\textit{International Conference on Learning Representations (ICLR)}, 2016.
+
+\bibitem{izmailov2018}
+P. Izmailov, D. Podoprikhin, T. Garipov, D. Vetrov, and A. G. Wilson.
+Averaging weights leads to wider optima and better generalization.
+\textit{Conference on Uncertainty in Artificial Intelligence (UAI)}, 2018.
+
+\bibitem{silver2018}
+D. Silver et al.
+A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play.
+\textit{Science}, 362(6419):1140--1144, 2018.
 
 \end{thebibliography}
 
