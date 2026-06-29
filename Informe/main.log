@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2025.11.7)  29 JUN 2026 01:44
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2025.11.7)  29 JUN 2026 01:51
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -692,24 +692,23 @@ File: figures/tuning_winrate.png Graphic file (type png)
 Package pdftex.def Info: figures/tuning_winrate.png  used on input line 198.
 (pdftex.def)             Requested size: 453.13185pt x 159.82938pt.
  [5]
-<figures/curva_aprendizaje.png, id=160, 860.013pt x 281.29707pt>
+<figures/curva_aprendizaje.png, id=163, 860.013pt x 281.29707pt>
 File: figures/curva_aprendizaje.png Graphic file (type png)
 <use figures/curva_aprendizaje.png>
 Package pdftex.def Info: figures/curva_aprendizaje.png  used on input line 215.
 
 (pdftex.def)             Requested size: 438.82297pt x 143.53258pt.
- [6 <./figures/tuning_winrate.png>] [7 <./figures/curva_aprendizaje.png>]
-<figures/torneo_final.png, id=174, 925.61192pt x 360.79408pt>
+ [6 <./figures/tuning_winrate.png>] [7 <./figures/curva_aprendizaje.png>] [8]
+<figures/torneo_final.png, id=189, 925.61192pt x 360.79408pt>
 File: figures/torneo_final.png Graphic file (type png)
 <use figures/torneo_final.png>
-Package pdftex.def Info: figures/torneo_final.png  used on input line 278.
+Package pdftex.def Info: figures/torneo_final.png  used on input line 298.
 (pdftex.def)             Requested size: 453.13185pt x 176.62549pt.
- [8]
-<figures/torneo_profundidades.png, id=181, 860.013pt x 281.29707pt>
+<figures/torneo_profundidades.png, id=190, 860.013pt x 281.29707pt>
 File: figures/torneo_profundidades.png Graphic file (type png)
 <use figures/torneo_profundidades.png>
-Package pdftex.def Info: figures/torneo_profundidades.png  used on input line 2
-85.
+Package pdftex.def Info: figures/torneo_profundidades.png  used on input line 3
+05.
 (pdftex.def)             Requested size: 438.82297pt x 143.53258pt.
  [9 <./figures/torneo_final.png> <./figures/torneo_profundidades.png>]
 [10] [11] (./main.aux
@@ -724,13 +723,13 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: 4B01AEF44C397AE89D5437A498D5FEF7;3596.
  ) 
 Here is how much of TeX's memory you used:
- 21932 strings out of 474222
- 401930 string characters out of 5748733
+ 21956 strings out of 474222
+ 402216 string characters out of 5748733
  1937975 words of memory out of 5000000
- 43770 multiletter control sequences out of 15000+600000
- 579039 words of font info for 86 fonts, out of 8000000 for 9000
+ 43783 multiletter control sequences out of 15000+600000
+ 582035 words of font info for 94 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 84i,11n,93p,1214b,846s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 84i,11n,93p,1270b,846s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></us
 r/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/shar
 e/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb></usr/share/texli
@@ -746,16 +745,17 @@ s/type1/public/cm-super/sfbx1095.pfb></usr/share/texmf/fonts/type1/public/cm-su
 per/sfbx1200.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfbx1440.pfb></u
 sr/share/texmf/fonts/type1/public/cm-super/sfrm0600.pfb></usr/share/texmf/fonts
 /type1/public/cm-super/sfrm0700.pfb></usr/share/texmf/fonts/type1/public/cm-sup
-er/sfrm0800.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfrm1000.pfb></us
-r/share/texmf/fonts/type1/public/cm-super/sfrm1095.pfb></usr/share/texmf/fonts/
-type1/public/cm-super/sfrm1200.pfb></usr/share/texmf/fonts/type1/public/cm-supe
-r/sfrm1728.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfti1000.pfb></usr
-/share/texmf/fonts/type1/public/cm-super/sfti1095.pfb></usr/share/texmf/fonts/t
-ype1/public/cm-super/sftt1095.pfb>
-Output written on main.pdf (11 pages, 641360 bytes).
+er/sfrm0800.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfrm0900.pfb></us
+r/share/texmf/fonts/type1/public/cm-super/sfrm1000.pfb></usr/share/texmf/fonts/
+type1/public/cm-super/sfrm1095.pfb></usr/share/texmf/fonts/type1/public/cm-supe
+r/sfrm1200.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfrm1728.pfb></usr
+/share/texmf/fonts/type1/public/cm-super/sfti0900.pfb></usr/share/texmf/fonts/t
+ype1/public/cm-super/sfti1000.pfb></usr/share/texmf/fonts/type1/public/cm-super
+/sfti1095.pfb></usr/share/texmf/fonts/type1/public/cm-super/sftt1095.pfb>
+Output written on main.pdf (11 pages, 680208 bytes).
 PDF statistics:
- 321 PDF objects out of 1000 (max. 8388607)
- 247 compressed objects within 3 object streams
- 49 named destinations out of 1000 (max. 500000)
+ 341 PDF objects out of 1000 (max. 8388607)
+ 263 compressed objects within 3 object streams
+ 54 named destinations out of 1000 (max. 500000)
  201 words of extra memory for PDF output out of 10000 (max. 10000000)
 
