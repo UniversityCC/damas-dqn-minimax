@@ -81,3 +81,30 @@ def test_sin_oponente_es_autojuego():
     info = play_episode(agent, max_steps=60)
     assert info["transitions"] > 0
     assert len(agent.buffer) == info["transitions"]
+
+
+# --------------------------------------------------------------------------- #
+# Maestro A: target bootstrap por búsqueda negamax (search_target_depth)
+# --------------------------------------------------------------------------- #
+
+def test_maestro_a_terminal_en_escala_pm1():
+    """El buscador del target usa terminales ±1 (escala de recompensa), NO ±1e6,
+    para no descentrar la escala de los valores Q."""
+    from damas.engine import empty_state_for_test
+    agent = DQNAgent(search_target_depth=2)
+    searcher = agent._make_target_searcher()
+    st = empty_state_for_test(turn=1)
+    st["board"][0] = -1                       # rojo (turn=1) sin jugadas -> pierde
+    assert searcher._term(st) == -1.0         # ±1, no 1e6
+
+
+def test_maestro_a_target_busqueda_da_loss_finito():
+    """Un paso de aprendizaje con el target por búsqueda produce una pérdida finita."""
+    import math
+    agent = DQNAgent(search_target_depth=2, buffer_capacity=2000, batch_size=16)
+    for _ in range(3):
+        play_episode(agent, max_steps=60)
+    loss = None
+    for _ in range(5):
+        loss = agent.learn()
+    assert loss is not None and math.isfinite(loss)
