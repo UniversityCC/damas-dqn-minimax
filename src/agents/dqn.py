@@ -11,7 +11,7 @@ import random
 import torch
 from torch import nn
 
-from damas.engine import legal_moves, encode, State, Action
+from damas.engine import legal_moves, encode, is_terminal, State, Action
 from model.q_network import QNetwork
 from model.action_space import action_to_index, index_to_action, legal_action_mask
 from .replay_buffer import ReplayBuffer
@@ -32,12 +32,18 @@ class DQNAgent:
         use_target: bool = True,
         double_dqn: bool = True,
         soft_tau: float | None = None,
+        search_target_depth: int | None = None,
         hidden: int | tuple[int, ...] = (512, 512),
     ):
         self.device = torch.device(device)
         self.use_target = use_target
         self.double_dqn = double_dqn
         self.soft_tau = soft_tau
+        # Maestro A: si se define, el target bootstrap usa una BÚSQUEDA negamax de esta
+        # profundidad en s' (la red como evaluador de hojas) en vez de max Q(s'),
+        # inyectando lookahead táctico en la señal de aprendizaje (estilo expert iteration).
+        self.search_target_depth = search_target_depth
+        self._target_searcher = None             # se construye perezosamente
         self.hidden = hidden
         self.online = QNetwork(hidden).to(self.device)
         self.target = QNetwork(hidden).to(self.device)
@@ -99,10 +105,13 @@ class DQNAgent:
         # Target negamax: y = r - γ · best_next, con best_next el valor del mejor
         # movimiento legal en s' (Double DQN si está activado; ver _bootstrap_values).
         with torch.no_grad():
-            next_states = torch.tensor([encode(t.next_state) for t in batch],
-                                       dtype=torch.float32, device=self.device)
-            masks = torch.stack([legal_action_mask(t.next_state) for t in batch]).to(self.device)
-            best_next = self._bootstrap_values(next_states, masks)
+            if self.search_target_depth:
+                best_next = self._search_bootstrap_values([t.next_state for t in batch])
+            else:
+                next_states = torch.tensor([encode(t.next_state) for t in batch],
+                                           dtype=torch.float32, device=self.device)
+                masks = torch.stack([legal_action_mask(t.next_state) for t in batch]).to(self.device)
+                best_next = self._bootstrap_values(next_states, masks)
             target = rewards + torch.where(dones, torch.zeros_like(rewards),
                                            -self.gamma * best_next)
 
@@ -137,6 +146,43 @@ class DQNAgent:
             q_next = net(next_states).masked_fill(~masks, float("-inf"))
             best = q_next.max(dim=1).values
         return torch.where(has_legal, best, torch.zeros_like(best))
+
+    def _make_target_searcher(self):
+        """Buscador negamax (el del híbrido, ya testeado) con la red como evaluador de
+        hojas, pero con terminales en escala ±1 para no descentrar la escala del target."""
+        from agents.hybrid import HybridAgent, dqn_value_fn
+        from damas.engine import result as _result
+
+        class _TargetSearcher(HybridAgent):
+            @staticmethod
+            def _term(state):
+                r = _result(state)                       # perspectiva del que acaba de mover
+                if r is None or r == 0:
+                    return 0.0
+                return 1.0 if r == state["turn"] else -1.0   # ±1 (escala de la recompensa)
+
+        return _TargetSearcher(eval_fn=dqn_value_fn(self.online),
+                               depth=self.search_target_depth,
+                               use_ordering=True, use_cache=True)
+
+    def _search_bootstrap_values(self, next_states) -> torch.Tensor:
+        """V(s') por BÚSQUEDA negamax a profundidad ``search_target_depth`` (Maestro A).
+
+        Es el valor de s' desde la perspectiva de su jugador en turno, igual que el
+        ``max Q(s')`` que reemplaza, pero con lookahead táctico de varias jugadas.
+        """
+        if self._target_searcher is None:
+            self._target_searcher = self._make_target_searcher()
+        s = self._target_searcher
+        s._cache.clear()        # la red es fija dentro del paso -> caché válida en todo el batch
+        d = self.search_target_depth
+        vals = []
+        for st in next_states:
+            if is_terminal(st) or not legal_moves(st):
+                vals.append(0.0)
+            else:
+                vals.append(s._negamax(st, d, float("-inf"), float("inf")))
+        return torch.tensor(vals, dtype=torch.float32, device=self.device)
 
     def update_target(self) -> None:
         """Sincroniza la red objetivo con la online.

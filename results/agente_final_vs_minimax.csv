@@ -1,0 +1,5 @@
+agente,oponente,wins,losses,draws,win_rate,no_loss_rate,ms_per_move_median
+Hibrido k=5 (Maestro A),Minimax d3,39,0,1,97.5,100.0,58
+Hibrido k=5 (Maestro A),Minimax d4,37,0,3,92.5,100.0,72
+Hibrido k=5 (Maestro A),Minimax d5,37,0,3,92.5,100.0,80
+Hibrido k=5 (Maestro A),Minimax d6,33,2,5,82.5,95.0,71

@@ -1,0 +1,7 @@
+checkpoint,ep_label,learn_steps,k,win_d4,noloss_d4,wld_d4,nodes_d4,win_d5,noloss_d5,wld_d5,nodes_d5
+checkpoint_first.pt,first,96392,3,21.4,85.7,3/2/9,86.0,0.0,7.1,0/13/1,70.0
+checkpoint_ep000200.pt,ep200,99519,3,14.3,57.1,2/6/6,91.0,0.0,7.1,0/13/1,72.0
+checkpoint_ep000400.pt,ep400,102502,3,0.0,28.6,0/10/4,93.0,7.1,7.1,1/13/0,74.0
+checkpoint_ep000600.pt,ep600,105659,3,14.3,21.4,2/11/1,75.0,0.0,0.0,0/14/0,82.0
+checkpoint_ep000800.pt,ep800,108715,3,28.6,78.6,4/3/7,78.0,7.1,7.1,1/13/0,82.0
+checkpoint_final.pt,final,108715,3,28.6,78.6,4/3/7,78.0,7.1,7.1,1/13/0,82.0
